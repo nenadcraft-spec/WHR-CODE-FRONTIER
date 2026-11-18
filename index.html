@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a151c">
+  <title>WHR · CODE FRONTIER</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="WHR CODE FRONTIER početak"><span class="rabbit">🐇</span><span>WHR <b>CODE FRONTIER</b><small>JUNGLE FRONTIER / PROTOTIP 0.1</small></span></a>
+    <div class="resource"><span class="crystal">◆</span><span><small>CODE</small><strong id="code">100</strong></span><span class="income" id="income">+0 / min</span></div>
+    <div class="top-stat"><small>RADNICI</small><strong id="workers">3 / 5</strong></div>
+    <div class="top-stat"><small>POPULACIJA</small><strong id="supply">3 / 10</strong></div>
+    <div class="clock"><small>VREME MEČA</small><strong id="clock">00:00</strong></div>
+    <button id="pause" class="quiet" disabled>Pauza</button>
+    <button id="restart" class="quiet">Novi početak</button>
+  </header>
+
+  <main class="battlefield">
+    <canvas id="battlefield" tabindex="0" aria-label="WHR mapa. Levi klik bira jedinicu ili bazu, desni klik šalje na cilj. Tastatura: W radnik, S Scout, G skupljanje, H zaustavljanje, Space pauza."></canvas>
+    <div class="map-label"><span class="live-dot"></span>CODE FRONTIER <span>/ ČETIRI DŽUNGLE</span></div>
+    <div class="view-controls"><button id="zoom-out" title="Udalji">−</button><button id="fit" title="Prikaži celu mapu">Cela mapa</button><button id="zoom-in" title="Približi">+</button></div>
+    <div class="mode-label">LOKALNI POLIGON <span>ekonomija · izviđanje</span></div>
+    <div id="notice" role="status" aria-live="polite"></div>
+
+    <section id="welcome" class="welcome">
+      <div class="eyebrow">WHR / PRVI IGRIVI KORAK</div>
+      <h1>Svaka imperija<br>počinje od <em>CODE-a.</em></h1>
+      <p>Tri radnika. Jedna Centrala. Četiri džungle za istraživanje.</p>
+      <label for="player">Izaberi početnu bazu</label>
+      <select id="player"><option value="0">P1 · Cyan / severozapad</option><option value="1">P2 · Violet / severoistok</option><option value="2">P3 · Amber / jugozapad</option><option value="3">P4 · Coral / jugoistok</option></select>
+      <button id="start" class="primary">Pokreni poligon <span>→</span></button>
+      <p class="disclaimer">Lokalni prototip, bez protivnika i mrežne partije. Kampovi i prodavnice su oznake planiranog sadržaja. Mapa je proceduralna skica prema konceptu.</p>
+    </section>
+  </main>
+
+  <footer class="command-deck">
+    <section class="minimap-wrap"><div class="section-label">TAKTIČKI PREGLED <span id="player-label">P1 / CYAN</span></div><canvas id="minimap" width="240" height="168" aria-label="Minimapa; klik pomera kameru"></canvas></section>
+    <section class="selection-panel"><div class="section-label">SELEKCIJA <span id="selected-count">1 OBJEKAT</span></div><div class="selected-details"><div id="portrait" class="portrait">⌂</div><div><h2 id="selection-name">WHR Centrala</h2><p id="selection-description">Tier 1 · proizvodnja i isporuka CODE-a</p><div id="health" class="health"><span></span></div><p id="selection-meta" class="meta">1.500 HP · bez napada</p></div></div><div id="queue" class="queue"></div></section>
+    <section class="actions-panel"><div class="section-label">KOMANDNI STO <span>TIER 1</span></div><div class="actions"><button id="train-worker" disabled><kbd>W</kbd><b>Radnik</b><span>50 ◆ · 15 s</span></button><button id="train-scout" disabled><kbd>S</kbd><b>Scout</b><span>75 ◆ · 20 s</span></button><button id="gather" disabled><kbd>G</kbd><b>Skupljaj</b><span>Najbliži CODE</span></button><button id="stop" disabled><kbd>H</kbd><b>Zaustavi</b><span>Zadrži teret</span></button></div><p id="action-hint">Izaberi Centralu za proizvodnju.</p></section>
+  </footer>
+  <div class="helpbar"><span><b>LEVI KLIK</b> selekcija · <b>PREVUCI</b> više jedinica · <b>DESNI KLIK</b> kretanje / CODE</span><span><b>TOČKIĆ</b> zum · <b>STRELICE</b> kamera · <b>SPACE</b> pauza</span><span>SIMULACIJA 20 Hz · <a href="docs/README.md">Pravila i razvoj</a></span></div>
+</body>
+</html>
