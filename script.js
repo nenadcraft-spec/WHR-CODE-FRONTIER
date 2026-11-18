@@ -1,374 +1,312 @@
-/* WHR CODE FRONTIER · 0.1. Local economy sandbox. No networking or combat yet. */
+/* WHR CODE FRONTIER · 0.2 · Map and construction sandbox. */
 (function (root) {
   'use strict';
-  const RULES = Object.freeze({ hz: 20, cell: 40, cols: 40, rows: 28, workerCost: 50, scoutCost: 75,
-    workerTicks: 300, scoutTicks: 400, harvestTicks: 60, workerSpeed: 3 * 16,
-    scoutSpeed: 4 * 16, cargo: 5, workerLimit: 5, supply: 10, nodeStock: 1000 });
+  const RULES = Object.freeze({ hz: 20, cell: 16, cols: 160, rows: 160, workerCost: 50, scoutCost: 75,
+    workerTicks: 300, scoutTicks: 400, harvestTicks: 60, workerSpeed: 48, scoutSpeed: 64,
+    cargo: 5, workerLimit: 5, supply: 10, nodeStock: 1000 });
   const WIDTH = RULES.cols * RULES.cell, HEIGHT = RULES.rows * RULES.cell;
-  const TEAMS = [{ name: 'CYAN', color: '#71e6e6', x: 170, y: 170 },
-    { name: 'VIOLET', color: '#c7a0ff', x: 1430, y: 170 },
-    { name: 'AMBER', color: '#ecc477', x: 170, y: 950 },
-    { name: 'CORAL', color: '#fa8e90', x: 1430, y: 950 }];
+  const TEAMS = [{ name: 'CYAN', color: '#71e6e6', x: 320, y: 320 }, { name: 'VIOLET', color: '#c7a0ff', x: 2240, y: 320 },
+    { name: 'AMBER', color: '#ecc477', x: 320, y: 2240 }, { name: 'CORAL', color: '#fa8e90', x: 2240, y: 2240 }];
+  const BUILDINGS = Object.freeze({
+    base: { name: 'WHR Centrala', cost: 300, ticks: 1200, w: 96, h: 96, hp: 1500 },
+    barracks: { name: 'Kasarna', cost: 120, ticks: 700, w: 80, h: 64, hp: 800 },
+    relay: { name: 'CODE Relej', cost: 60, ticks: 400, w: 32, h: 32, hp: 400 }
+  });
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
   const cellIndex = (x, y) => Math.floor(y / RULES.cell) * RULES.cols + Math.floor(x / RULES.cell);
+  const cellPoint = i => ({ x: (i % RULES.cols + .5) * RULES.cell, y: (Math.floor(i / RULES.cols) + .5) * RULES.cell });
+  const mirror = (p, owner) => ({ x: owner % 2 ? WIDTH - p.x : p.x, y: owner >= 2 ? HEIGHT - p.y : p.y });
+  const inside = (p, r, margin = 0) => Math.abs(p.x - r.x) < r.w / 2 + margin && Math.abs(p.y - r.y) < r.h / 2 + margin;
+  function footprint(type, p) {
+    const d = BUILDINGS[type];
+    return { x: Math.floor((p.x - d.w / 2) / 16) * 16 + d.w / 2, y: Math.floor((p.y - d.h / 2) / 16) * 16 + d.h / 2, w: d.w, h: d.h };
+  }
+  function rectCells(r) {
+    const result = [];
+    for (let y = Math.floor((r.y - r.h / 2) / 16); y < Math.ceil((r.y + r.h / 2) / 16); y++)
+      for (let x = Math.floor((r.x - r.w / 2) / 16); x < Math.ceil((r.x + r.w / 2) / 16); x++)
+        if (x >= 0 && y >= 0 && x < RULES.cols && y < RULES.rows) result.push(y * RULES.cols + x);
+    return result;
+  }
   function makeMap() {
-    const blocked = new Uint8Array(RULES.cols * RULES.rows);
-    // Four mirrored forest islands per quadrant. Roads and camp clearings remain open.
-    const islands = [[8, 6, 3, 2], [14, 6, 2, 2], [8, 10, 2, 2], [14, 10, 2, 2]];
-    for (const [x, y, w, h] of islands) for (const flipX of [false, true]) for (const flipY of [false, true]) {
-      const sx = flipX ? RULES.cols - x - w : x, sy = flipY ? RULES.rows - y - h : y;
-      for (let yy = sy; yy < sy + h; yy++) for (let xx = sx; xx < sx + w; xx++) blocked[yy * RULES.cols + xx] = 1;
-    }
-    // Keep all planned camps and merchant clearings accessible and visible.
-    for (const sx of [1, -1]) for (const sy of [1, -1]) {
-      const x = sx === 1 ? 480 : 1120, y = sy === 1 ? 320 : 800;
-      const clearings = [{ x: x - sx * 90, y: y - sy * 100 }, { x: x + sx * 115, y: y - sy * 80 },
-        { x: x + sx * 110, y: y + sy * 140 }, { x: x - sx * 100, y: y + sy * 105 }];
-      for (let i = 0; i < blocked.length; i++) if (blocked[i] && clearings.some(p => distance(cellPoint(i), p) < 78)) blocked[i] = 0;
-    }
-    return blocked;
-  }
-  function freeCell(blocked, x, y) {
-    const cx = Math.floor(clamp(x, 0, WIDTH - 1) / RULES.cell), cy = Math.floor(clamp(y, 0, HEIGHT - 1) / RULES.cell);
-    const seed = cy * RULES.cols + cx;
-    if (!blocked[seed]) return seed;
-    const queue = [seed], seen = new Set(queue);
-    for (let q = 0; q < queue.length; q++) {
-      const i = queue[q], ix = i % RULES.cols, iy = Math.floor(i / RULES.cols);
-      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
-        const nx = ix + dx, ny = iy + dy, n = ny * RULES.cols + nx;
-        if (nx < 0 || nx >= RULES.cols || ny < 0 || ny >= RULES.rows || seen.has(n)) continue;
-        if (!blocked[n]) return n;
-        seen.add(n); queue.push(n);
-      }
-    }
-    return -1;
-  }
-  function cellPoint(i) { return { x: (i % RULES.cols + .5) * RULES.cell, y: (Math.floor(i / RULES.cols) + .5) * RULES.cell }; }
-  function pathfind(blocked, from, to) {
-    const start = freeCell(blocked, from.x, from.y), end = freeCell(blocked, to.x, to.y);
-    if (start < 0 || end < 0) return null;
-    const open = [start], costs = new Map([[start, 0]]), previous = new Map(), closed = new Set();
-    const heuristic = i => Math.hypot(i % RULES.cols - end % RULES.cols, Math.floor(i / RULES.cols) - Math.floor(end / RULES.cols));
-    while (open.length) {
-      let best = 0;
-      for (let i = 1; i < open.length; i++) if (costs.get(open[i]) + heuristic(open[i]) < costs.get(open[best]) + heuristic(open[best])) best = i;
-      const current = open.splice(best, 1)[0];
-      if (current === end) {
-        const result = []; let c = end;
-        while (c !== start) { result.push(cellPoint(c)); c = previous.get(c); }
-        result.reverse();
-        // The center of a blocked target's nearest free cell is a safe destination.
-        const tx = clamp(to.x, 1, WIDTH - 1), ty = clamp(to.y, 1, HEIGHT - 1);
-        const final = !blocked[cellIndex(tx, ty)] ? { x: tx, y: ty } : cellPoint(end);
-        result.push(final); return result;
-      }
-      closed.add(current);
-      const x = current % RULES.cols, y = Math.floor(current / RULES.cols);
-      for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-        const nx = x + dx, ny = y + dy, n = ny * RULES.cols + nx;
-        if (nx < 0 || ny < 0 || nx >= RULES.cols || ny >= RULES.rows || blocked[n] || closed.has(n)) continue;
-        if (dx && dy && (blocked[y * RULES.cols + nx] || blocked[ny * RULES.cols + x])) continue;
-        const g = costs.get(current) + (dx && dy ? Math.SQRT2 : 1);
-        if (g < (costs.get(n) ?? Infinity)) { previous.set(n, current); costs.set(n, g); if (!open.includes(n)) open.push(n); }
-      }
-    }
-    return null;
-  }
-  function createGame(active = 0) {
-    const game = { tick: 0, active, running: false, paused: false, blocked: makeMap(), players: [], units: [], nodes: [], bases: [], nextId: 1 };
+    const terrain = new Uint8Array(RULES.cols * RULES.rows), forest = new Uint8Array(terrain.length), noBuild = new Uint8Array(terrain.length);
+    const zones = [], ramps = [], camps = [], shops = [], expansions = [];
     TEAMS.forEach((t, owner) => {
-      game.players.push({ code: 100, deliveries: [], queue: [] });
-      game.bases.push({ id: 'base' + owner, type: 'base', owner, x: t.x, y: t.y, hp: 1500 });
-      for (let n = 0; n < 6; n++) {
-        const dx = (n % 3 - 1) * 48, dy = 88 + Math.floor(n / 3) * 44;
-        game.nodes.push({ id: 'node' + owner + '-' + n, type: 'node', owner, x: t.x + dx,
-          y: t.y + (owner < 2 ? -dy : dy), remaining: RULES.nodeStock, miner: null });
-      }
-      for (let n = 0; n < 3; n++) spawn(game, owner, 'worker', n);
+      zones.push({ owner, kind: 'home', ...mirror({x:320,y:320}, owner), w:512,h:512 });
+      const natural = mirror({x:320,y:960},owner);
+      expansions.push({ owner, ...natural }); zones.push({ owner, kind:'expansion',...natural,w:320,h:320 });
+      const localRamps = [{x:544,y:544,w:128,h:128,axis:'diagonal'}, {x:576,y:320,w:96,h:96,axis:'side'}];
+      for (const r of localRamps) ramps.push({...r,...mirror(r,owner),owner});
+      for(const [tier,p] of [[1,{x:720,y:720}],[2,{x:1040,y:720}],[3,{x:1040,y:1088}]]) camps.push({id:'camp'+owner+'-'+tier, tier, owner,...mirror(p,owner)});
+      shops.push({id:'shop'+owner,owner,...mirror({x:720,y:1056},owner)});
     });
-    return game;
-  }
-  function spawn(game, owner, type, initial = -1) {
-    const b = game.bases[owner];
-    const u = { id: 'u' + game.nextId++, type, owner, x: b.x - 22 + (initial >= 0 ? initial : 1) * 22,
-      y: b.y + (owner < 2 ? 48 : -48), hp: type === 'worker' ? 80 : 100,
-      cargo: 0, mode: 'idle', path: [], nodeId: null, work: 0 };
-    game.units.push(u);
-    if (type === 'worker') assignGather(game, u, initial >= 0 ? game.nodes[owner * 6 + initial] : null);
-    return u;
-  }
-  function releaseNode(game, u) {
-    const node = game.nodes.find(n => n.id === u.nodeId);
-    if (node && node.miner === u.id) node.miner = null;
-    u.work = 0;
-  }
-  function moveTo(game, u, target, mode) {
-    const path = pathfind(game.blocked, u, target);
-    u.path = path || []; u.mode = path ? mode : 'idle';
-    return path !== null;
-  }
-  function pickNode(game, u) {
-    return game.nodes.filter(n => n.owner === u.owner && n.remaining > 0)
-      .sort((a, b) => (distance(a, u) + (a.miner ? 45 : 0)) - (distance(b, u) + (b.miner ? 45 : 0)))[0];
-  }
-  function returnCargo(game, u) {
-    const b = game.bases[u.owner];
-    return moveTo(game, u, { x: b.x, y: b.y + (u.owner < 2 ? -42 : 42) }, 'return');
-  }
-  function assignGather(game, u, node = null) {
-    if (u.type !== 'worker') return false;
-    releaseNode(game, u);
-    node = node && node.remaining > 0 ? node : pickNode(game, u);
-    u.nodeId = node ? node.id : null;
-    if (u.cargo) return returnCargo(game, u);
-    if (!node) { u.mode = 'idle'; u.path = []; return false; }
-    return moveTo(game, u, { x: node.x, y: node.y + (node.owner < 2 ? 20 : -20) }, 'toNode');
-  }
-  function command(game, owner, ids, action, target) {
-    if (!game.running || game.paused || owner !== game.active) return false;
-    let changed = false;
-    for (const u of game.units.filter(u => u.owner === owner && ids.includes(u.id))) {
-      if (action === 'gather' && u.type === 'worker') { assignGather(game, u, target); changed = true; }
-      if (action === 'move') { releaseNode(game, u); u.nodeId = null; moveTo(game, u, target, 'move'); changed = true; }
-      if (action === 'stop') { releaseNode(game, u); u.path = []; u.mode = 'idle'; u.nodeId = null; changed = true; }
-    }
-    return changed;
-  }
-  function purchase(game, owner, type) {
-    if (!game.running || game.paused) return 'Pokreni ili nastavi poligon.';
-    if (owner !== game.active) return 'Možeš proizvoditi samo u svojoj Centrali.';
-    if (!['worker', 'scout'].includes(type)) return 'Nepoznata jedinica.';
-    const p = game.players[owner], owned = game.units.filter(u => u.owner === owner), reserved = p.queue;
-    const count = owned.filter(u => u.type === type).length + reserved.filter(j => j.type === type).length;
-    if (count >= (type === 'worker' ? RULES.workerLimit : 1)) return type === 'worker' ? 'T1 limit: najviše 5 radnika, uključujući naručene.' : 'Scout je već prisutan ili naručen.';
-    if (owned.length + reserved.length >= RULES.supply) return 'Nema slobodne populacije.';
-    if (reserved.length >= 5) return 'Proizvodni red je pun.';
-    const cost = type === 'worker' ? RULES.workerCost : RULES.scoutCost, duration = type === 'worker' ? RULES.workerTicks : RULES.scoutTicks;
-    if (p.code < cost) return 'Nedovoljno CODE-a.';
-    p.code -= cost; p.queue.push({ type, remaining: duration, duration });
-    return null;
-  }
-  function travel(u, speed) {
-    let remaining = speed / RULES.hz;
-    while (u.path.length && remaining > 0) {
-      const target = u.path[0], d = distance(u, target);
-      if (d <= remaining) { u.x = target.x; u.y = target.y; u.path.shift(); remaining -= d; }
-      else { u.x += (target.x - u.x) / d * remaining; u.y += (target.y - u.y) / d * remaining; remaining = 0; }
-    }
-  }
-  function step(game) {
-    if (!game.running || game.paused) return;
-    game.tick++;
-    for (const u of game.units) {
-      if (u.path.length) { travel(u, u.type === 'worker' ? RULES.workerSpeed : RULES.scoutSpeed); continue; }
-      if (u.mode === 'move') u.mode = 'idle';
-      else if (u.mode === 'toNode' || u.mode === 'waiting') {
-        const n = game.nodes.find(n => n.id === u.nodeId);
-        if (!n || n.remaining <= 0) { assignGather(game, u); continue; }
-        if (!n.miner) { n.miner = u.id; u.mode = 'harvest'; u.work = 0; }
-        else u.mode = 'waiting';
-      } else if (u.mode === 'harvest') {
-        const n = game.nodes.find(n => n.id === u.nodeId);
-        if (!n || n.miner !== u.id || n.remaining <= 0) { assignGather(game, u); continue; }
-        if (++u.work >= RULES.harvestTicks) {
-          u.cargo = Math.min(RULES.cargo, n.remaining); n.remaining -= u.cargo; n.miner = null; u.work = 0; returnCargo(game, u);
-        }
-      } else if (u.mode === 'return') {
-        if (u.cargo) { const p = game.players[u.owner]; p.code += u.cargo; p.deliveries.push({ tick: game.tick, amount: u.cargo }); u.cargo = 0; }
-        assignGather(game, u, game.nodes.find(n => n.id === u.nodeId));
+    const roads = [
+      [[640,640],[1920,640],[1920,1920],[640,1920],[640,640]],
+      [[640,1280],[1920,1280]], [[1280,640],[1280,1920]],
+      ...TEAMS.map((t,i)=>[[t.x,t.y],[i%2?1920:640,i>=2?1920:640]])
+    ];
+    function nearSegment(p,a,b,width) {const dx=b[0]-a[0],dy=b[1]-a[1],v=clamp(((p.x-a[0])*dx+(p.y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(p.x-a[0]-v*dx,p.y-a[1]-v*dy)<width;}
+    for(let i=0;i<terrain.length;i++) {
+      const p=cellPoint(i);
+      let tree=false;
+      for(let owner=0;owner<4;owner++) {
+        const q=mirror(p,owner);
+        if(q.x>656&&q.x<1200&&q.y>656&&q.y<1200) tree=true;
+        // Plateau cliffs have two explicit navigable exits per corner.
+        if(q.x>=64&&q.x<=576&&q.y>=64&&q.y<=576&& (q.x<80||q.x>560||q.y<80||q.y>560)) terrain[i]=1;
+        if(inside(q,{x:320,y:192,w:240,h:176})) noBuild[i]=1; // Worker economy corridor.
       }
+      const trail = camps.some(c=>distance(p,c)<90)||shops.some(s=>distance(p,s)<78)
+        || TEAMS.some((t,owner)=>{const q=mirror(p,owner);return nearSegment(q,[640,960],[1200,960],32)||nearSegment(q,[880,640],[880,1200],32)
+          || [[720,720],[1040,720],[1040,1088],[720,1056]].some(target=>nearSegment(q,[880,960],target,32));});
+      if(tree&&!trail) forest[i]=terrain[i]=1;
+      if(roads.some(route=>route.slice(1).some((b,j)=>nearSegment(p,route[j],b,58)))) noBuild[i]=1;
+      if(distance(p,{x:1280,y:1280})<160) noBuild[i]=1;
+      if(ramps.some(r=>inside(p,r))) {terrain[i]=forest[i]=0;noBuild[i]=1;}
     }
-    for (let owner = 0; owner < game.players.length; owner++) {
-      const p = game.players[owner];
-      p.deliveries = p.deliveries.filter(d => d.tick > game.tick - 60 * RULES.hz);
-      if (p.queue.length && --p.queue[0].remaining <= 0) spawn(game, owner, p.queue.shift().type);
-    }
+    return {terrain,forest,noBuild,zones,ramps,camps,shops,expansions,roads};
   }
-  const API = { RULES, WIDTH, HEIGHT, TEAMS, createGame, purchase, command, step, pathfind, assignGather };
-  if (typeof module !== 'undefined' && module.exports) module.exports = API;
-  if (typeof document === 'undefined') return;
+  function freeCell(blocked,x,y) {
+    const start=cellIndex(clamp(x,0,WIDTH-1),clamp(y,0,HEIGHT-1));
+    if(!blocked[start])return start;
+    const queue=[start],seen=new Set(queue);
+    for(let j=0;j<queue.length;j++){const i=queue[j],cx=i%RULES.cols,cy=Math.floor(i/RULES.cols);
+      for(const [dx,dy]of [[1,0],[0,1],[-1,0],[0,-1]]){const nx=cx+dx,ny=cy+dy,n=ny*RULES.cols+nx;
+        if(nx<0||ny<0||nx>=RULES.cols||ny>=RULES.rows||seen.has(n))continue;
+        if(!blocked[n])return n;seen.add(n);queue.push(n);
+      }
+    }return -1;
+  }
+  function pathfind(blocked,from,to,strict=false) {
+    if(!to||!Number.isFinite(to.x)||!Number.isFinite(to.y))return null;
+    if(from.x<0||from.y<0||from.x>=WIDTH||from.y>=HEIGHT||strict&&(to.x<0||to.y<0||to.x>=WIDTH||to.y>=HEIGHT))return null;
+    const start=cellIndex(from.x,from.y), end=strict?cellIndex(to.x,to.y):freeCell(blocked,to.x,to.y);
+    if(start<0||start>=blocked.length||end<0||end>=blocked.length||blocked[start]||blocked[end])return null;
+    const g=new Float64Array(blocked.length);g.fill(Infinity);g[start]=0;
+    const prev=new Int32Array(blocked.length);prev.fill(-1);const closed=new Uint8Array(blocked.length),heap=[];
+    const score=i=>g[i]+Math.hypot(i%RULES.cols-end%RULES.cols,Math.floor(i/RULES.cols)-Math.floor(end/RULES.cols));
+    function push(i){let n=heap.length;const item={i,f:score(i)};heap.push(item);while(n>0){const p=(n-1)>>1;if(heap[p].f<=item.f)break;heap[n]=heap[p];n=p;}heap[n]=item;}
+    function pop(){const top=heap[0],last=heap.pop();if(heap.length){let n=0;while(n*2+1<heap.length){let c=n*2+1;if(c+1<heap.length&&heap[c+1].f<heap[c].f)c++;if(heap[c].f>=last.f)break;heap[n]=heap[c];n=c;}heap[n]=last;}return top.i;}
+    push(start);
+    while(heap.length){const i=pop();if(closed[i])continue;if(i===end){const out=[];for(let c=end;c!==start;c=prev[c])out.push(cellPoint(c));out.reverse();
+        const final=!blocked[cellIndex(clamp(to.x,0,WIDTH-1),clamp(to.y,0,HEIGHT-1))]?{x:clamp(to.x,1,WIDTH-1),y:clamp(to.y,1,HEIGHT-1)}:cellPoint(end);out.push(final);return out;}
+      closed[i]=1;const x=i%RULES.cols,y=Math.floor(i/RULES.cols);
+      for(const [dx,dy]of [[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){const nx=x+dx,ny=y+dy,n=ny*RULES.cols+nx;
+        if(nx<0||ny<0||nx>=RULES.cols||ny>=RULES.rows||blocked[n]||closed[n])continue;
+        if(dx&&dy&&(blocked[y*RULES.cols+nx]||blocked[ny*RULES.cols+x]))continue;
+        const cost=g[i]+(dx&&dy?Math.SQRT2:1);if(cost<g[n]){g[n]=cost;prev[n]=i;push(n);}
+      }
+    }return null;
+  }
+  function rebuildNavigation(game){game.blocked=game.map.terrain.slice();for(const b of game.buildings)for(const i of rectCells(b))game.blocked[i]=1;
+    for(const n of game.nodes)if(n.remaining>0)for(const i of rectCells({x:n.x,y:n.y,w:16,h:16}))game.blocked[i]=1;game.navRevision++;}
+  function makeBuilding(id,owner,type,p,complete=false){const d=BUILDINGS[type];return{id,owner,type,...footprint(type,p),hp:complete?d.hp:1,completed:complete,progress:complete?d.ticks:0,duration:d.ticks,builderId:null,queue:[]};}
+  function createGame(active=0){const map=makeMap();const game={tick:0,active,running:false,paused:false,map,blocked:map.terrain.slice(),navRevision:0,players:[],units:[],nodes:[],bases:[],buildings:[],nextId:1};
+    TEAMS.forEach((t,owner)=>{const b=makeBuilding('base'+owner,owner,'base',t,true);game.bases.push(b);game.buildings.push(b);game.players.push({code:100,deliveries:[],queue:b.queue});
+      const addField=(center,field)=>{for(let n=0;n<6;n++){const dx=(n%3-1)*48,dy=112+Math.floor(n/3)*48;
+        game.nodes.push({id:'node'+owner+'-'+field+'-'+n,type:'node',owner,field,x:center.x+(owner%2?-dx:dx),y:center.y+(owner<2?-dy:dy),remaining:RULES.nodeStock,miner:null});}};
+      addField(t,'home');addField(map.expansions[owner],'expansion');
+    });rebuildNavigation(game);
+    TEAMS.forEach((t,owner)=>{for(let n=0;n<3;n++)spawn(game,owner,'worker',game.bases[owner],n);});return game;}
+  function exitPoints(b){const out=[];for(let x=b.x-b.w/2-8;x<=b.x+b.w/2+8;x+=16)out.push({x,y:b.y-b.h/2-8},{x,y:b.y+b.h/2+8});
+    for(let y=b.y-b.h/2+8;y<=b.y+b.h/2-8;y+=16)out.push({x:b.x-b.w/2-8,y},{x:b.x+b.w/2+8,y});return out;}
+  function availableExit(game,b){const toward={x:b.x,y:b.y+(b.owner<2?-112:112)};return exitPoints(b).filter(p=>p.x>0&&p.y>0&&p.x<WIDTH&&p.y<HEIGHT&&!game.blocked[cellIndex(p.x,p.y)]).sort((a,c)=>distance(a,toward)-distance(c,toward))
+    .find(p=>!game.units.some(u=>distance(u,p)<14));}
+  function spawn(game,owner,type,base=game.bases[owner],initial=-1){let p=initial>=0?{x:base.x+(owner%2?-1:1)*((initial-1)*32+8),y:base.y+(owner<2?-72:72)}:availableExit(game,base);
+    if(!p)return null;const u={id:'u'+game.nextId++,type,owner,...p,hp:type==='worker'?80:100,cargo:0,mode:'idle',path:[],nodeId:null,work:0,jobId:null,dest:null,pathRevision:game.navRevision};game.units.push(u);
+    if(type==='worker')assignGather(game,u,initial>=0?game.nodes.filter(n=>n.owner===owner&&n.field==='home')[initial]:null);return u;}
+  function releaseNode(game,u){const n=game.nodes.find(n=>n.id===u.nodeId);if(n&&n.miner===u.id)n.miner=null;u.work=0;}
+  function releaseJob(game,u){if(u.jobId){const b=game.buildings.find(b=>b.id===u.jobId);if(b&&b.builderId===u.id)b.builderId=null;u.jobId=null;}}
+  function moveTo(game,u,p,mode,strict=false){const path=pathfind(game.blocked,u,p,strict);u.path=path||[];u.dest=p;u.pathRevision=game.navRevision;u.mode=path?mode:'blocked';u.resumeMode=mode;return !!path;}
+  function pickNode(game,u){return game.nodes.filter(n=>n.owner===u.owner&&n.remaining>0).sort((a,b)=>(distance(a,u)+(a.miner?48:0))-(distance(b,u)+(b.miner?48:0)))[0];}
+  function returnCargo(game,u){const bases=game.bases.filter(b=>b.owner===u.owner&&b.completed).sort((a,b)=>distance(a,u)-distance(b,u));
+    for(const b of bases){const points=exitPoints(b).filter(p=>!game.blocked[cellIndex(p.x,p.y)]).sort((a,b)=>distance(a,u)-distance(b,u));
+      for(const p of points){const path=pathfind(game.blocked,u,p,true);if(path){u.path=path;u.dest=p;u.mode='return';u.resumeMode='return';u.pathRevision=game.navRevision;return true;}}}
+    u.path=[];u.mode='blocked';u.resumeMode='return';return false;}
+  function assignGather(game,u,node=null){if(u.type!=='worker')return false;releaseNode(game,u);releaseJob(game,u);
+    node=node&&game.nodes.includes(node)&&node.remaining>0?node:pickNode(game,u);u.nodeId=node?node.id:null;
+    if(u.cargo)return returnCargo(game,u);if(!node){u.mode='idle';u.path=[];return false;}
+    return moveTo(game,u,{x:node.x+(node.owner%2?-8:8),y:node.y+(node.owner<2?24:-24)},'toNode',true);}
+  function command(game,owner,ids,action,target){if(!game.running||game.paused||owner!==game.active)return false;let changed=false;
+    for(const u of game.units.filter(u=>u.owner===owner&&ids.includes(u.id))){
+      if(action==='gather'&&u.type==='worker'){assignGather(game,u,target);changed=true;}
+      if(action==='move'){releaseNode(game,u);releaseJob(game,u);u.nodeId=null;moveTo(game,u,target,'move');changed=true;}
+      if(action==='stop'){releaseNode(game,u);releaseJob(game,u);u.path=[];u.dest=null;u.mode='idle';u.nodeId=null;changed=true;}
+    }return changed;}
+  const supplyCap=(game,owner)=>Math.min(20,10+5*game.buildings.filter(b=>b.owner===owner&&b.type==='relay'&&b.completed).length);
+  const orders=(game,owner)=>game.bases.filter(b=>b.owner===owner).flatMap(b=>b.queue);
+  function purchase(game,owner,type,baseId='base'+owner){if(!game.running||game.paused)return'Pokreni ili nastavi poligon.';
+    if(owner!==game.active)return'Možeš proizvoditi samo u svojoj Centrali.';if(!['worker','scout'].includes(type))return'Nepoznata jedinica.';
+    const b=game.bases.find(b=>b.id===baseId&&b.owner===owner&&b.completed);if(!b)return'Izaberi završenu sopstvenu Centralu.';
+    const own=game.units.filter(u=>u.owner===owner),reserved=orders(game,owner),count=own.filter(u=>u.type===type).length+reserved.filter(j=>j.type===type).length;
+    if(count>=(type==='worker'?5:1))return type==='worker'?'T1 limit: najviše 5 radnika, uključujući naručene.':'Scout je već prisutan ili naručen.';
+    if(own.length+reserved.length>=supplyCap(game,owner))return'Nema slobodne populacije.';if(b.queue.length>=5)return'Proizvodni red je pun.';
+    const cost=type==='worker'?50:75,duration=type==='worker'?300:400;if(game.players[owner].code<cost)return'Nedovoljno CODE-a.';
+    game.players[owner].code-=cost;b.queue.push({type,remaining:duration,duration});return null;}
+  function approaches(blocked,r,from){return exitPoints(r).filter(p=>p.x>=0&&p.y>=0&&p.x<WIDTH&&p.y<HEIGHT&&!blocked[cellIndex(p.x,p.y)])
+    .sort((a,b)=>distance(a,from)-distance(b,from));}
+  function placement(game,owner,type,p,workerId){const d=BUILDINGS[type];if(!d||!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return{error:'Nevažeća građevina ili lokacija.'};
+    const r=footprint(type,p),cells=rectCells(r);const fail=error=>({error,...r});
+    if(r.x-r.w/2<16||r.y-r.h/2<16||r.x+r.w/2>WIDTH-16||r.y+r.h/2>HEIGHT-16)return fail('Van granica mape.');
+    const zone=game.map.zones.find(z=>z.owner===owner&&inside({x:r.x-r.w/2,y:r.y-r.h/2},z)&&inside({x:r.x+r.w/2,y:r.y+r.h/2},z));
+    if(!zone)return fail('Gradi u svojoj bazi ili označenom proširenju.');
+    if(cells.some(i=>game.map.noBuild[i]))return fail('Sačuvaj rampu, glavni put i radnički prolaz.');
+    if(cells.some(i=>game.blocked[i]))return fail('Preklapanje sa objektom, CODE-om ili neprohodnim terenom.');
+    if(game.map.camps.some(c=>inside(c,r,90))||game.map.shops.some(s=>inside(s,r,65)))return fail('Neutralna lokacija mora ostati slobodna.');
+    if(game.units.some(u=>inside(u,r,12)))return fail('Jedinica stoji na gradilištu.');
+    const worker=game.units.find(u=>u.id===workerId&&u.owner===owner&&u.type==='worker');if(!worker)return fail('Izaberi svog radnika za gradnju.');
+    const blocked=game.blocked.slice();for(const i of cells)blocked[i]=1;
+    for(const point of approaches(blocked,r,worker)){const path=pathfind(blocked,worker,point,true);if(path)return{...r,error:null,point,path};}
+    return fail('Radnik nema pristup gradilištu.');}
+  function beginBuild(game,owner,workerId,type,p){if(!game.running||game.paused)return{error:'Pokreni ili nastavi poligon.'};if(owner!==game.active)return{error:'Nemaš kontrolu nad tom bazom.'};
+    const check=placement(game,owner,type,p,workerId);if(check.error)return check;const d=BUILDINGS[type];if(game.players[owner].code<d.cost)return{error:'Nedovoljno CODE-a.'};
+    const u=game.units.find(u=>u.id===workerId);releaseNode(game,u);releaseJob(game,u);const b=makeBuilding('building'+game.nextId++,owner,type,check);game.players[owner].code-=d.cost;
+    game.buildings.push(b);if(type==='base')game.bases.push(b);b.builderId=u.id;u.jobId=b.id;rebuildNavigation(game);u.path=check.path;u.dest=check.point;u.mode='toBuild';u.pathRevision=game.navRevision;return{building:b,error:null};}
+  function resumeBuild(game,owner,workerId,buildingId){if(!game.running||game.paused||owner!==game.active)return false;const u=game.units.find(u=>u.id===workerId&&u.owner===owner&&u.type==='worker'),b=game.buildings.find(b=>b.id===buildingId&&b.owner===owner&&!b.completed);
+    if(!u||!b||(b.builderId&&b.builderId!==u.id))return false;
+    for(const p of approaches(game.blocked,b,u)){const path=pathfind(game.blocked,u,p,true);if(!path)continue;releaseNode(game,u);releaseJob(game,u);b.builderId=u.id;u.jobId=b.id;u.path=path;u.dest=p;u.mode='toBuild';u.pathRevision=game.navRevision;return true;}return false;}
+  function cancelBuild(game,owner,id){if(!game.running||game.paused||owner!==game.active)return false;const b=game.buildings.find(b=>b.id===id&&b.owner===owner&&!b.completed);if(!b)return false;
+    const u=game.units.find(u=>u.id===b.builderId);game.players[owner].code+=Math.floor(BUILDINGS[b.type].cost*(b.progress?0.75:1));game.buildings=game.buildings.filter(x=>x!==b);game.bases=game.bases.filter(x=>x!==b);rebuildNavigation(game);
+    if(u){u.jobId=null;assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}return true;}
+  function travel(u,speed){let remaining=speed/RULES.hz;while(u.path.length&&remaining>0){const p=u.path[0],d=distance(u,p);if(d<=remaining){u.x=p.x;u.y=p.y;u.path.shift();remaining-=d;}else{u.x+=(p.x-u.x)/d*remaining;u.y+=(p.y-u.y)/d*remaining;remaining=0;}}}
+  function step(game){if(!game.running||game.paused)return;game.tick++;
+    for(const u of game.units){
+      if(u.path.length&&u.pathRevision!==game.navRevision){moveTo(game,u,u.dest,u.mode,true);}
+      if(u.mode==='blocked'){if(game.tick%20===0){if(u.jobId)resumeBuild(game,u.owner,u.id,u.jobId);else if(u.cargo)returnCargo(game,u);else if(u.nodeId)assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));else if(u.dest)moveTo(game,u,u.dest,u.resumeMode);}continue;}
+      if(u.path.length){travel(u,u.type==='worker'?48:64);continue;}
+      if(u.mode==='move')u.mode='idle';
+      else if(u.mode==='toBuild'||u.mode==='build'){const b=game.buildings.find(b=>b.id===u.jobId);if(!b||b.completed||b.builderId!==u.id){releaseJob(game,u);u.mode='idle';continue;}
+        u.mode='build';b.progress++;b.hp=Math.max(1,Math.round(BUILDINGS[b.type].hp*b.progress/b.duration));if(b.progress>=b.duration){b.completed=true;b.builderId=null;u.jobId=null;assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}}
+      else if(u.mode==='toNode'||u.mode==='waiting'){const n=game.nodes.find(n=>n.id===u.nodeId);if(!n||n.remaining<=0){assignGather(game,u);continue;}if(!n.miner){n.miner=u.id;u.mode='harvest';u.work=0;}else u.mode='waiting';}
+      else if(u.mode==='harvest'){const n=game.nodes.find(n=>n.id===u.nodeId);if(!n||n.miner!==u.id||n.remaining<=0){assignGather(game,u);continue;}
+        if(++u.work>=60){u.cargo=Math.min(5,n.remaining);n.remaining-=u.cargo;n.miner=null;u.work=0;if(!n.remaining)rebuildNavigation(game);returnCargo(game,u);}}
+      else if(u.mode==='return'){if(u.cargo){game.players[u.owner].code+=u.cargo;game.players[u.owner].deliveries.push({tick:game.tick,amount:u.cargo});u.cargo=0;}assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}
+    }
+    for(const p of game.players)p.deliveries=p.deliveries.filter(d=>d.tick>game.tick-1200);
+    for(const b of game.bases)if(b.completed&&b.queue.length){const j=b.queue[0];if(j.remaining>0)j.remaining--;if(j.remaining<=0&&spawn(game,b.owner,j.type,b))b.queue.shift();}
+  }
+  const API={RULES,WIDTH,HEIGHT,TEAMS,BUILDINGS,createGame,purchase,command,step,pathfind,assignGather,placement,beginBuild,resumeBuild,cancelBuild,supplyCap,cellIndex,cellPoint,footprint};
+  if(typeof module!=='undefined'&&module.exports)module.exports=API;
+  if(typeof document==='undefined')return;
 
-  const $ = id => document.getElementById(id), canvas = $('battlefield'), ctx = canvas.getContext('2d'), mini = $('minimap'), mctx = mini.getContext('2d');
-  let game = createGame(), selected = ['base0'], started = false, camera = { x: WIDTH / 2, y: HEIGHT / 2, scale: 1 }, view = { width: 1, height: 1 }, pointer = null, orderMarker = null, noticeTimer, lastTime = 0, accumulator = 0;
-  const keys = new Set();
-  const formations = [[-20, -20], [20, -20], [-20, 20], [20, 20], [0, 0]];
-  const zones = [{ x: 480, y: 320, sx: 1, sy: 1 }, { x: 1120, y: 320, sx: -1, sy: 1 }, { x: 480, y: 800, sx: 1, sy: -1 }, { x: 1120, y: 800, sx: -1, sy: -1 }];
-  const modes = { idle: 'Nezaposlen', move: 'Kretanje', toNode: 'Ide po CODE', waiting: 'Čeka nalazište', harvest: 'Skuplja CODE', return: 'Nosi CODE' };
-  function notify(message) { $('notice').textContent = message; $('notice').classList.add('show'); clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('notice').classList.remove('show'), 3500); }
-  function resize() { const r = canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); view.width = r.width; view.height = r.height; canvas.width = r.width * dpr; canvas.height = r.height * dpr; fit(); }
-  function fit() { camera.scale = Math.min(view.width / (WIDTH + 100), view.height / (HEIGHT + 100)); camera.x = WIDTH / 2; camera.y = HEIGHT / 2; }
-  function world(sx, sy) { return { x: (sx - view.width / 2) / camera.scale + camera.x, y: (sy - view.height / 2) / camera.scale + camera.y }; }
-  function pos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  function zoom(factor, screen = { x: view.width / 2, y: view.height / 2 }) {
-    const before = world(screen.x, screen.y); camera.scale = clamp(camera.scale * factor, Math.min(view.width / (WIDTH + 100), view.height / (HEIGHT + 100)), 2);
-    const after = world(screen.x, screen.y); camera.x += before.x - after.x; camera.y += before.y - after.y;
-  }
-  function hit(p) {
-    return game.units.filter(u => distance(u, p) < 22).sort((a, b) => distance(a, p) - distance(b, p))[0]
-      || game.bases.find(b => distance(b, p) < 62) || game.nodes.find(n => distance(n, p) < 25);
-  }
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
-  canvas.addEventListener('pointerdown', e => {
-    canvas.focus(); const p = pos(e);
-    if (e.button === 2) {
-      e.preventDefault(); if (!started || game.paused) return;
-      const target = world(p.x, p.y), object = hit(target), units = game.units.filter(u => selected.includes(u.id) && u.owner === game.active);
-      units.forEach((u, i) => {
-        if (object && object.type === 'node' && u.type === 'worker') command(game, game.active, [u.id], 'gather', object);
-        else { const offset = units.length > 1 ? formations[i % formations.length] : [0, 0]; command(game, game.active, [u.id], 'move', { x: target.x + offset[0], y: target.y + offset[1] }); }
-      });
-      if (units.length) orderMarker = { ...target, until: performance.now() + 900 };
-      else notify('Prvo izaberi svoje radnike ili Scouta.');
-      return;
-    }
-    if (e.button === 0) { pointer = { start: p, end: p, shift: e.shiftKey }; canvas.setPointerCapture(e.pointerId); }
+  const $=id=>document.getElementById(id),canvas=$('battlefield'),mini=$('minimap'),mctx=mini.getContext('2d');
+  let ctx=canvas.getContext('2d'),game=createGame(),selected=['base0'],started=false,camera={x:WIDTH/2,y:HEIGHT/2,scale:1},view={width:1,height:1};
+  let pointer=null,mouse={x:0,y:0},orderMarker=null,noticeTimer,lastTime=0,accumulator=0,buildMode=null,preview=null,previewKey='',terrainCache=null;
+  const keys=new Set(),modes={idle:'Nezaposlen',move:'Kretanje',toNode:'Ide po CODE',waiting:'Čeka nalazište',harvest:'Skuplja CODE',return:'Nosi CODE',toBuild:'Ide do gradilišta',build:'Gradi',blocked:'Čeka slobodan prolaz'};
+  function notify(text){$('notice').textContent=text;$('notice').classList.add('show');clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('notice').classList.remove('show'),3600);}
+  function fit(){camera.scale=Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80));camera.x=WIDTH/2;camera.y=HEIGHT/2;}
+  function home(){const b=game.bases[game.active];camera.scale=Math.min(1.5,view.width/900,view.height/760);camera.x=b.x+(b.x<1280?130:-130);camera.y=b.y+(b.y<1280?90:-90);}
+  function resize(){const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);view.width=r.width;view.height=r.height;canvas.width=r.width*dpr;canvas.height=r.height*dpr;if(started)home();else fit();}
+  function world(x,y){return{x:(x-view.width/2)/camera.scale+camera.x,y:(y-view.height/2)/camera.scale+camera.y};}
+  function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+  function zoom(f,p={x:view.width/2,y:view.height/2}){const before=world(p.x,p.y);camera.scale=clamp(camera.scale*f,Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80)),2);const after=world(p.x,p.y);camera.x+=before.x-after.x;camera.y+=before.y-after.y;}
+  function hit(p){return game.units.filter(u=>distance(u,p)<18).sort((a,b)=>distance(a,p)-distance(b,p))[0]||game.buildings.find(b=>inside(p,b))||game.nodes.find(n=>distance(n,p)<21);}
+  function endPlacement(){buildMode=null;preview=null;previewKey='';$('build-status').hidden=true;canvas.classList.remove('placing');}
+  function chooseBuild(type){const u=game.units.find(u=>selected.includes(u.id)&&u.owner===game.active&&u.type==='worker');if(!started||game.paused||!u)return notify('Izaberi svog radnika i nastavi poligon.');
+    buildMode={type,workerId:u.id};previewKey='';canvas.classList.add('placing');notify(BUILDINGS[type].name+': levi klik postavlja, desni klik ili Escape odustaje.');updatePreview();}
+  function updatePreview(){if(!buildMode)return;const p=world(mouse.x,mouse.y),r=footprint(buildMode.type,p),key=[r.x,r.y,game.navRevision,Math.floor(game.tick/5),buildMode.workerId].join(':');
+    if(key===previewKey)return;previewKey=key;preview=placement(game,game.active,buildMode.type,p,buildMode.workerId);
+    const cost=BUILDINGS[buildMode.type].cost;if(!preview.error&&game.players[game.active].code<cost)preview={...preview,error:'Nedovoljno CODE-a.'};
+    $('build-status').hidden=false;$('build-status').classList.toggle('invalid',!!preview.error);$('build-status').textContent=BUILDINGS[buildMode.type].name+' · '+cost+' CODE — '+(preview.error||'Lokacija dostupna. Levi klik za gradnju.');}
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  canvas.addEventListener('pointerdown',e=>{canvas.focus();mouse=pos(e);const p=world(mouse.x,mouse.y);
+    if(buildMode){if(e.button===2){endPlacement();return;}if(e.button===0){const result=beginBuild(game,game.active,buildMode.workerId,buildMode.type,p);if(result.error){notify(result.error);previewKey='';return;}selected=[result.building.id];notify(BUILDINGS[result.building.type].name+' naručena. Radnik putuje na gradilište.');endPlacement();updateHUD();}return;}
+    if(e.button===2){if(!started||game.paused)return;const object=hit(p),units=game.units.filter(u=>selected.includes(u.id)&&u.owner===game.active);
+      if(object&&BUILDINGS[object.type]&&!object.completed){const u=units.find(u=>u.type==='worker');if(!u||!resumeBuild(game,game.active,u.id,object.id))notify('Izaberi svog slobodnog radnika za nastavak gradnje.');else notify('Radnik nastavlja gradnju.');return;}
+      units.forEach((u,i)=>{if(object&&object.type==='node'&&u.type==='worker')command(game,game.active,[u.id],'gather',object);else command(game,game.active,[u.id],'move',{x:p.x+(units.length>1?(i%3-1)*20:0),y:p.y+(units.length>1?Math.floor(i/3)*20:0)});});
+      if(units.length)orderMarker={...p,until:performance.now()+900};else notify('Izaberi svoju jedinicu za kretanje.');return;}
+    if(e.button===0){pointer={start:mouse,end:mouse,shift:e.shiftKey};canvas.setPointerCapture(e.pointerId);}
   });
-  canvas.addEventListener('pointermove', e => { if (pointer) pointer.end = pos(e); });
-  canvas.addEventListener('pointerup', e => {
-    if (!pointer || e.button !== 0) return;
-    const a = world(pointer.start.x, pointer.start.y), b = world(pointer.end.x, pointer.end.y);
-    let ids;
-    if (distance(pointer.start, pointer.end) > 5) ids = game.units.filter(u => u.owner === game.active && u.x >= Math.min(a.x, b.x) && u.x <= Math.max(a.x, b.x) && u.y >= Math.min(a.y, b.y) && u.y <= Math.max(a.y, b.y)).map(u => u.id);
-    else { const object = hit(b); ids = object ? [object.id] : []; }
-    selected = pointer.shift ? [...new Set([...selected, ...ids])] : ids; pointer = null; updateHUD();
+  canvas.addEventListener('pointermove',e=>{mouse=pos(e);if(pointer)pointer.end=mouse;if(buildMode)updatePreview();});
+  canvas.addEventListener('pointerup',e=>{if(!pointer||e.button!==0)return;const a=world(pointer.start.x,pointer.start.y),b=world(pointer.end.x,pointer.end.y);let ids;
+    if(distance(pointer.start,pointer.end)>5)ids=game.units.filter(u=>u.owner===game.active&&u.x>=Math.min(a.x,b.x)&&u.x<=Math.max(a.x,b.x)&&u.y>=Math.min(a.y,b.y)&&u.y<=Math.max(a.y,b.y)).map(u=>u.id);
+    else{const object=hit(b);ids=object?[object.id]:[];}selected=pointer.shift?[...new Set([...selected,...ids])]:ids;pointer=null;updateHUD();});
+  canvas.addEventListener('pointercancel',()=>{pointer=null;});
+  canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.12:1/1.12,pos(e));previewKey='';},{passive:false});
+  mini.addEventListener('pointerdown',e=>{const r=mini.getBoundingClientRect();camera.x=(e.clientX-r.left)/r.width*WIDTH;camera.y=(e.clientY-r.top)/r.height*HEIGHT;previewKey='';});
+  $('home').onclick=home;$('fit').onclick=fit;$('zoom-in').onclick=()=>zoom(1.3);$('zoom-out').onclick=()=>zoom(1/1.3);
+  function reset(){endPlacement();game=createGame(Number($('player').value));selected=['base'+game.active];started=false;terrainCache=null;$('welcome').hidden=false;$('pause').disabled=true;$('pause').textContent='Pauza';keys.clear();accumulator=0;orderMarker=null;fit();updateHUD();}
+  $('restart').onclick=reset;$('player').onchange=reset;
+  $('start').onclick=()=>{game.running=true;started=true;$('welcome').hidden=true;$('pause').disabled=false;home();canvas.focus();notify('Izaberi radnika, pa B za Kasarnu ili R za Relej. Cela mapa je dostupna za test.');updateHUD();};
+  function pause(){if(!started)return;game.paused=!game.paused;$('pause').textContent=game.paused?'Nastavi':'Pauza';accumulator=0;endPlacement();updateHUD();}
+  $('pause').onclick=pause;
+  function train(type){const b=game.bases.find(b=>selected.includes(b.id)&&b.owner===game.active);if(!b)return notify('Izaberi svoju završenu Centralu.');const error=purchase(game,game.active,type,b.id);notify(error||((type==='worker'?'Radnik':'Scout')+' dodat u red.'));updateHUD();}
+  $('train-worker').onclick=()=>train('worker');$('train-scout').onclick=()=>train('scout');$('gather').onclick=()=>{command(game,game.active,selected,'gather');updateHUD();};$('stop').onclick=()=>{command(game,game.active,selected,'stop');updateHUD();};
+  for(const type of ['base','barracks','relay'])$('build-'+type).onclick=()=>chooseBuild(type);
+  $('cancel-build').onclick=()=>{const id=selected.find(id=>game.buildings.some(b=>b.id===id&&!b.completed&&b.owner===game.active));if(id&&cancelBuild(game,game.active,id)){selected=[];notify('Gradnja otkazana. CODE vraćen prema napretku.');updateHUD();}};
+  window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(buildMode)endPlacement();else selected=[];updateHUD();return;}if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;
+    if(e.code==='Space')pause();if(e.code==='KeyW')train('worker');if(e.code==='KeyS')train('scout');if(e.code==='KeyG')$('gather').click();if(e.code==='KeyH')$('stop').click();
+    if(e.code==='KeyB')chooseBuild('barracks');if(e.code==='KeyR')chooseBuild('relay');if(e.code==='KeyC')chooseBuild('base');if(e.code==='KeyX')$('cancel-build').click();
   });
-  canvas.addEventListener('pointercancel', () => { pointer = null; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12, pos(e)); }, { passive: false });
-  mini.addEventListener('pointerdown', e => { const r = mini.getBoundingClientRect(); camera.x = (e.clientX - r.left) / r.width * WIDTH; camera.y = (e.clientY - r.top) / r.height * HEIGHT; });
-  $('zoom-in').onclick = () => zoom(1.3); $('zoom-out').onclick = () => zoom(1 / 1.3); $('fit').onclick = fit;
-  function reset() { game = createGame(Number($('player').value)); selected = ['base' + game.active]; started = false; $('welcome').hidden = false; $('pause').disabled = true; $('pause').textContent = 'Pauza'; accumulator = 0; orderMarker = null; keys.clear(); fit(); updateHUD(); }
-  $('restart').onclick = reset;
-  $('player').onchange = reset;
-  $('start').onclick = () => { game.running = true; started = true; $('welcome').hidden = true; $('pause').disabled = false; canvas.focus(); notify('Poligon pokrenut. Levi klik bira; desni klik šalje na CODE ili teren.'); updateHUD(); };
-  function pause() { if (!started) return; game.paused = !game.paused; $('pause').textContent = game.paused ? 'Nastavi' : 'Pauza'; accumulator = 0; updateHUD(); }
-  $('pause').onclick = pause;
-  function train(type) {
-    if (!selected.includes('base' + game.active)) return notify('Izaberi svoju Centralu za proizvodnju.');
-    const error = purchase(game, game.active, type); if (error) notify(error); else notify((type === 'worker' ? 'Radnik' : 'Scout') + ' dodat u proizvodni red.'); updateHUD();
+  window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>keys.clear());
+  function text(id,value){if($(id).textContent!==String(value))$(id).textContent=value;}
+  let queueSignature='';
+  function updateHUD(){const p=game.players[game.active],own=game.units.filter(u=>u.owner===game.active),units=game.units.filter(u=>selected.includes(u.id)),pending=orders(game,game.active);
+    text('code',p.code);text('workers',own.filter(u=>u.type==='worker').length+' / 5');text('supply',own.length+' / '+supplyCap(game,game.active)+(pending.length?' (+'+pending.length+')':''));
+    const seconds=Math.floor(game.tick/20);text('clock',String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'));
+    text('income','+'+p.deliveries.reduce((s,d)=>s+d.amount,0)+(seconds<60?' / '+seconds+' s':' / min'));text('player-label','P'+(game.active+1)+' / '+TEAMS[game.active].name);text('selected-count',selected.length+' OBJEKATA');
+    const b=game.buildings.find(b=>selected.includes(b.id)),n=game.nodes.find(n=>selected.includes(n.id));let title='Ništa nije izabrano',desc='Klikni objekat ili prevuci preko svojih jedinica.',meta='B / R / C: gradnja izabranim radnikom.',portrait='◇',ratio=0;
+    if(b){title=BUILDINGS[b.type].name;desc=!b.completed?(b.builderId?'Gradilište · radnik putuje ili gradi':'Gradilište miruje · desni klik radnikom'):b.type==='base'?'Tier 1 · proizvodnja i isporuka CODE-a':b.type==='relay'?'Završen Relej · +5 kapaciteta, T1 najviše 20':'Završena Kasarna · vojska u sledećoj verziji';
+      meta=b.hp+' / '+BUILDINGS[b.type].hp+' HP'+(!b.completed?' · '+Math.floor(b.progress/b.duration*100)+'% · '+Math.ceil((b.duration-b.progress)/20)+' s rada':'');portrait=b.type==='base'?'⌂':b.type==='relay'?'◆':'⚑';ratio=b.hp/BUILDINGS[b.type].hp;}
+    else if(units.length){const u=units[0];title=units.length>1?units.length+' jedinica':u.type==='worker'?'WHR Radnik':'Scout';desc=units.length>1?'Desni klik za grupno kretanje.':modes[u.mode];meta=u.hp+' HP · '+(u.type==='worker'?u.cargo+'/5 CODE · graditelj':'Izviđač · bez napada');portrait=u.type==='worker'?'⚒':'➤';ratio=1;}
+    else if(n){title='CODE · '+(n.field==='home'?'početno polje':'proširenje');desc='Jedno aktivno mesto za skupljanje.';meta=n.remaining+' / 1.000 CODE · teret 5 · rad 3 s';portrait='◆';}
+    text('selection-name',title);text('selection-description',desc);text('selection-meta',meta);text('portrait',portrait);$('health').hidden=!ratio;$('health').firstElementChild.style.width=(ratio*100)+'%';
+    const can=started&&!game.paused,base=!!b&&b.type==='base'&&b.owner===game.active&&b.completed,worker=units.some(u=>u.owner===game.active&&u.type==='worker');
+    $('train-worker').disabled=!can||!base;$('train-scout').disabled=!can||!base;$('gather').disabled=!can||!worker;$('stop').disabled=!can||!units.some(u=>u.owner===game.active);
+    for(const type of ['base','barracks','relay']){$('build-'+type).disabled=!can||!worker;$('build-'+type).classList.toggle('active',!!buildMode&&buildMode.type===type);}
+    $('cancel-build').disabled=!can||!b||b.owner!==game.active||b.completed;
+    const jobs=base?b.queue:[],signature=JSON.stringify(jobs.map(j=>[j.type,j.remaining]));if(signature!==queueSignature){queueSignature=signature;$('queue').replaceChildren();jobs.forEach((j,i)=>{const el=document.createElement('span');el.className='job';el.textContent=(j.type==='worker'?'Radnik':'Scout')+' · '+(i?'čeka':j.remaining?Math.ceil(j.remaining/20)+' s':'čeka izlaz');el.style.setProperty('--progress',((1-j.remaining/j.duration)*100)+'%');$('queue').append(el);});}
+    text('action-hint',game.paused?'Pauza · svi radovi miruju.':buildMode?'Levi klik potvrđuje. Desni klik / Escape odustaje.':worker?'B Kasarna · R Relej · C Centrala. Desni klik na gradilište nastavlja rad.':'Izaberi Centralu za proizvodnju ili radnika za gradnju.');
   }
-  $('train-worker').onclick = () => train('worker'); $('train-scout').onclick = () => train('scout');
-  $('gather').onclick = () => { command(game, game.active, selected, 'gather'); updateHUD(); };
-  $('stop').onclick = () => { command(game, game.active, selected, 'stop'); updateHUD(); };
-  window.addEventListener('keydown', e => {
-    if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement.tagName)) return;
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-    keys.add(e.code); if (e.repeat) return;
-    if (e.code === 'Space') pause();
-    if (e.code === 'KeyW') train('worker'); if (e.code === 'KeyS') train('scout');
-    if (e.code === 'KeyG') $('gather').click(); if (e.code === 'KeyH') $('stop').click();
-    if (e.code === 'Escape') { selected = []; updateHUD(); }
-  });
-  window.addEventListener('keyup', e => keys.delete(e.code)); window.addEventListener('blur', () => keys.clear());
-  function updateHUD() {
-    const p = game.players[game.active], own = game.units.filter(u => u.owner === game.active), units = game.units.filter(u => selected.includes(u.id));
-    $('code').textContent = p.code; $('workers').textContent = own.filter(u => u.type === 'worker').length + ' / 5';
-    $('supply').textContent = own.length + ' / 10' + (p.queue.length ? ' (+' + p.queue.length + ')' : '');
-    const seconds = Math.floor(game.tick / RULES.hz); $('clock').textContent = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
-    const income = p.deliveries.reduce((s, d) => s + d.amount, 0); $('income').textContent = '+' + income + (seconds < 60 ? ' / ' + seconds + ' s' : ' / min');
-    $('player-label').textContent = 'P' + (game.active + 1) + ' / ' + TEAMS[game.active].name;
-    $('selected-count').textContent = selected.length + (selected.length === 1 ? ' OBJEKAT' : ' OBJEKATA');
-    let title = 'Ništa nije izabrano', desc = 'Klikni bazu ili prevuci okvir preko svojih jedinica.', meta = 'Desni klik zadaje cilj.', portrait = '◇', health = false;
-    const b = game.bases.find(b => selected.includes(b.id)), n = game.nodes.find(n => selected.includes(n.id));
-    if (b) { title = 'WHR Centrala · P' + (b.owner + 1); desc = b.owner === game.active ? 'Tier 1 · proizvodnja i isporuka CODE-a' : 'Druga baza · posmatranje ekonomije'; meta = '1.500 HP · radnici 5 max · bez napada'; portrait = '⌂'; health = true; }
-    else if (units.length) { const u = units[0]; title = units.length > 1 ? units.length + ' jedinica' : u.type === 'worker' ? 'WHR Radnik' : 'Scout'; desc = units.length > 1 ? 'Desni klik za grupno kretanje.' : modes[u.mode]; meta = units.length === 1 ? u.hp + ' HP · ' + (u.type === 'worker' ? u.cargo + '/5 CODE · brzina 3' : 'Izviđač · brzina 4 · bez napada') + (u.owner !== game.active ? ' · druga baza' : '') : 'Selekcija: ' + units.filter(u => u.type === 'worker').length + ' radnika'; portrait = u.type === 'worker' ? '⚒' : '➤'; health = true; }
-    else if (n) { title = 'CODE nalazište'; desc = 'Jedno aktivno mesto za skupljanje.'; meta = n.remaining + ' / 1.000 CODE · teret 5 · rad 3 s'; portrait = '◆'; }
-    $('selection-name').textContent = title; $('selection-description').textContent = desc; $('selection-meta').textContent = meta; $('portrait').textContent = portrait; $('health').hidden = !health;
-    const canAct = started && !game.paused, baseSelected = !!b && b.owner === game.active;
-    $('train-worker').disabled = !canAct || !baseSelected; $('train-scout').disabled = !canAct || !baseSelected;
-    $('gather').disabled = !canAct || !units.some(u => u.owner === game.active && u.type === 'worker'); $('stop').disabled = !canAct || !units.some(u => u.owner === game.active);
-    $('queue').replaceChildren();
-    if (baseSelected) p.queue.forEach((j, i) => { const el = document.createElement('span'); el.className = 'job'; el.textContent = (j.type === 'worker' ? 'Radnik' : 'Scout') + ' · ' + (i ? 'čeka' : Math.ceil(j.remaining / RULES.hz) + ' s'); el.style.setProperty('--progress', ((1 - j.remaining / j.duration) * 100) + '%'); $('queue').append(el); });
-    $('action-hint').textContent = game.paused ? 'Pauza · simulacija i proizvodnja miruju.' : baseSelected ? 'Limiti uključuju naručene jedinice. CODE se plaća odmah.' : 'Izaberi Centralu za proizvodnju; jedinicu za kretanje.';
-  }
-  function line(points, color, width) { ctx.beginPath(); points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke(); }
-  function circle(x, y, radius, fill, stroke = null, width = 1) { ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); } }
-  function label(text, x, y, color = '#c2d0b9', size = 12) { ctx.fillStyle = color; ctx.font = '600 ' + size + 'px "Segoe UI",sans-serif'; ctx.textAlign = 'center'; ctx.fillText(text, x, y); }
-  function bunny(x, y, size, color) {
-    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(x - size * .35, y - size * .8, size * .19, size * .7, -.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x + size * .35, y - size * .8, size * .19, size * .7, .2, 0, Math.PI * 2); ctx.fill(); circle(x, y, size * .55, color);
-    circle(x - size * .2, y - size * .05, size * .07, '#142327'); circle(x + size * .2, y - size * .05, size * .07, '#142327');
-  }
-  function crystal(x, y, size, depleted = false) {
-    ctx.beginPath(); ctx.moveTo(x, y - size); ctx.lineTo(x + size * .6, y - size * .2); ctx.lineTo(x + size * .4, y + size * .5); ctx.lineTo(x - size * .45, y + size * .5); ctx.lineTo(x - size * .65, y - size * .2); ctx.closePath();
-    ctx.fillStyle = depleted ? '#344d4a' : '#55cce1'; ctx.fill(); ctx.strokeStyle = depleted ? '#45625b' : '#b4f5ed'; ctx.lineWidth = 1.5; ctx.stroke();
-    line([[x, y - size], [x - size * .1, y + size * .5]], depleted ? '#45625b' : '#d5fff5', 1);
-  }
-  function drawGround() {
-    ctx.fillStyle = '#233e32'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    for (let i = 0; i < 1300; i++) { const x = (i * 173 + 41) % WIDTH, y = (i * 227 + 13) % HEIGHT; circle(x, y, 1 + i % 3, i % 2 ? '#2a4837' : '#1d382e'); }
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    const ring = [[170, 170], [800, 120], [1430, 170], [1480, 560], [1430, 950], [800, 1000], [170, 950], [120, 560], [170, 170]];
-    for (const points of [ring, [[120, 560], [1480, 560]], [[800, 120], [800, 1000]]]) {
-      line(points, '#152f29', 65); line(points, '#666a50', 50); line(points, '#919078', 39); line(points, '#b0a488', 1.5);
+  function line(points,color,width){ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();}
+  function circle(x,y,r,fill,stroke=null,width=1){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);if(fill){ctx.fillStyle=fill;ctx.fill();}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}}
+  function label(t,x,y,color='#c2d0b9',size=12){ctx.fillStyle=color;ctx.font='600 '+size+'px "Segoe UI",sans-serif';ctx.textAlign='center';ctx.fillText(t,x,y);}
+  function bunny(x,y,s,color){ctx.fillStyle=color;for(const sign of [-1,1]){ctx.beginPath();ctx.ellipse(x+sign*s*.35,y-s*.8,s*.19,s*.7,sign*.2,0,Math.PI*2);ctx.fill();}circle(x,y,s*.55,color);circle(x-s*.2,y-s*.05,s*.07,'#142327');circle(x+s*.2,y-s*.05,s*.07,'#142327');}
+  function crystal(x,y,s,depleted=false){ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s*.6,y-s*.2);ctx.lineTo(x+s*.4,y+s*.5);ctx.lineTo(x-s*.45,y+s*.5);ctx.lineTo(x-s*.65,y-s*.2);ctx.closePath();ctx.fillStyle=depleted?'#344d4a':'#55cce1';ctx.fill();ctx.strokeStyle=depleted?'#45625b':'#b4f5ed';ctx.lineWidth=1.5;ctx.stroke();line([[x,y-s],[x-s*.1,y+s*.5]],depleted?'#45625b':'#d5fff5',1);}
+  function terrain(){if(terrainCache)return terrainCache;terrainCache=document.createElement('canvas');terrainCache.width=WIDTH;terrainCache.height=HEIGHT;const actual=ctx;ctx=terrainCache.getContext('2d');
+    ctx.fillStyle='#243e32';ctx.fillRect(0,0,WIDTH,HEIGHT);for(let i=0;i<3500;i++)circle((i*173+41)%WIDTH,(i*227+13)%HEIGHT,1+i%3,i%2?'#2b4938':'#20382d');ctx.lineJoin='round';ctx.lineCap='round';
+    for(const road of game.map.roads){line(road,'#18372c',148);line(road,'#62684d',128);line(road,'#8c8b70',100);line(road,'#b1a17c',2);}
+    for(const z of game.map.zones){ctx.fillStyle=z.kind==='home'?'#34483c':'#354531';ctx.fillRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);ctx.strokeStyle=z.kind==='home'?'#66775b':'#7a7955';ctx.lineWidth=2;ctx.strokeRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);
+      if(z.kind==='home'){for(let x=z.x-z.w/2+32;x<z.x+z.w/2;x+=32)line([[x,z.y-z.h/2],[x,z.y+z.h/2]],'#3d5142',1);for(let y=z.y-z.h/2+32;y<z.y+z.h/2;y+=32)line([[z.x-z.w/2,y],[z.x+z.w/2,y]],'#3d5142',1);label('P'+(z.owner+1)+' · PROSTOR ZA BAZU',z.x,z.y+220,TEAMS[z.owner].color,14);}
+      else label('CODE PROŠIRENJE',z.x,z.y+125,'#c8ba84',15);
     }
-    zones.forEach((z, index) => {
-      circle(z.x, z.y, 185, '#1e392d', '#33503a', 2);
-      const camp = [{ x: z.x - z.sx * 90, y: z.y - z.sy * 100 }, { x: z.x + z.sx * 115, y: z.y - z.sy * 80 }, { x: z.x + z.sx * 110, y: z.y + z.sy * 140 }];
-      line([[z.x - z.sx * 190, z.y], [z.x, z.y + z.sy * 50], [z.x + z.sx * 210, z.y + z.sy * 180]], '#756b49', 22);
-      camp.forEach((c, tier) => { line([[z.x, z.y + z.sy * 50], [c.x, c.y]], '#756b49', 16); circle(c.x, c.y, 38, '#4e5438', '#697055', 2); circle(c.x, c.y + 3, 16 + tier * 3, '#737969', '#a6ac87', 2); label('T' + (tier + 1), c.x, c.y - 46, ['#a5d29c', '#e7c77e', '#ec9691'][tier], 16); });
-      const shop = { x: z.x - z.sx * 100, y: z.y + z.sy * 105 };
-      line([[z.x, z.y + z.sy * 50], [shop.x, shop.y]], '#756b49', 16);
-      ctx.fillStyle = '#4f4632'; ctx.fillRect(shop.x - 25, shop.y - 10, 50, 34); ctx.fillStyle = '#ba8c50'; ctx.beginPath(); ctx.moveTo(shop.x - 33, shop.y - 10); ctx.lineTo(shop.x, shop.y - 33); ctx.lineTo(shop.x + 33, shop.y - 10); ctx.closePath(); ctx.fill(); label('SHOP', shop.x, shop.y + 40, '#dfc38c', 12);
-      label('JUNGLA ' + (index + 1), z.x, z.y + 12, '#b2c3a3', 15);
-    });
-    // These forest cells are the actual navigation obstacles, not just a painted background.
-    for (let i = 0; i < game.blocked.length; i++) if (game.blocked[i]) {
-      const p = cellPoint(i); circle(p.x + 2, p.y + 6, 25, '#142d26');
-      circle(p.x - 8, p.y - 5, 20, '#31583a'); circle(p.x + 9, p.y - 7, 18, '#3b6240'); circle(p.x, p.y - 13, 17, '#476e43');
+    for(let owner=0;owner<4;owner++){const transform=p=>{const q=mirror({x:p[0],y:p[1]},owner);return[q.x,q.y];},hub=transform([880,960]);
+      for(const route of [[[640,960],[1200,960]],[[880,640],[880,1200]],...[[720,720],[1040,720],[1040,1088],[720,1056]].map(p=>[[880,960],p])])line(route.map(transform),'#8b7750',42);
+      const z=mirror({x:880,y:920},owner);label('JUNGLA '+(owner+1),z.x,z.y,'#c9ccab',23);
     }
-    circle(800, 560, 92, '#465653', '#afaa8a', 4); circle(800, 560, 70, '#303d48', '#8b9fa0', 2); circle(800, 560, 47, '#4c4066', '#a49bd3', 2);
-    crystal(800, 554, 38); bunny(800, 555, 15, '#f0ddff'); label('CODE JEZGRO', 800, 632, '#c2b4e9', 12);
-    game.bases.forEach(b => {
-      const t = TEAMS[b.owner];
-      ctx.fillStyle = '#283b37'; ctx.fillRect(b.x - 83, b.y - 67, 166, 134); ctx.strokeStyle = t.color; ctx.lineWidth = 2; ctx.strokeRect(b.x - 83, b.y - 67, 166, 134);
-      if (selected.includes(b.id)) { ctx.strokeStyle = '#baffb9'; ctx.lineWidth = 3; ctx.strokeRect(b.x - 88, b.y - 72, 176, 144); }
-      ctx.fillStyle = '#182d37'; ctx.fillRect(b.x - 43, b.y - 23, 86, 65); ctx.fillStyle = '#496069'; ctx.fillRect(b.x - 35, b.y - 33, 70, 44); ctx.strokeStyle = t.color; ctx.strokeRect(b.x - 35, b.y - 33, 70, 44);
-      bunny(b.x, b.y - 31, 21, t.color); circle(b.x, b.y + 24, 10, t.color); label('P' + (b.owner + 1) + ' · TIER 1', b.x, b.y + 84, t.color, 14);
-      if (b.owner === game.active) label('TVOJA CENTRALA', b.x, b.y + 101, '#bdc9b3', 9);
-    });
-    game.nodes.forEach(n => {
-      if (selected.includes(n.id)) circle(n.x, n.y, 25, null, '#beffb9', 2);
-      crystal(n.x, n.y, 13, !n.remaining); crystal(n.x + 10, n.y + 5, 8, !n.remaining);
-    });
-    ctx.strokeStyle = '#6f7957'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, WIDTH, HEIGHT);
+    for(let i=0;i<game.map.terrain.length;i++){const p=cellPoint(i);if(game.map.forest[i]){if(i%2||Math.floor(i/160)%2)continue;circle(p.x,p.y+5,20,'#142e24');circle(p.x-6,p.y-4,16,'#315a38');circle(p.x+6,p.y-7,15,'#426a3e');circle(p.x,p.y-14,12,'#527845');}
+      else if(game.map.terrain[i]){ctx.fillStyle='#58695a';ctx.fillRect(p.x-8,p.y-8,16,16);line([[p.x-7,p.y-6],[p.x+6,p.y-6]],'#8b9778',2);}}
+    for(const ramp of game.map.ramps){const dx=ramp.owner%2?-1:1,dy=ramp.owner>=2?-1:1,angle=ramp.axis==='diagonal'?Math.atan2(dy,dx):Math.atan2(0,dx);ctx.save();ctx.translate(ramp.x,ramp.y);ctx.rotate(angle);ctx.fillStyle='#8b9176';ctx.fillRect(-48,-40,96,80);for(let j=-3;j<=3;j++)line([[j*12,-36],[j*12,36]],'#bec1a1',3);ctx.restore();label('RAMPA',ramp.x,ramp.y+5,'#344a3b',10);}
+    game.map.camps.forEach(c=>{circle(c.x,c.y,64,'#515b3c','#81906a',2);circle(c.x,c.y,25,'#717d61','#a7b08a',2);label('T'+c.tier+' KAMP',c.x,c.y-76,['','#b3d49c','#ead08a','#e8a395'][c.tier],16);label('planirano',c.x,c.y+48,'#a6b497',10);});
+    game.map.shops.forEach(s=>{ctx.fillStyle='#4f4632';ctx.fillRect(s.x-32,s.y-12,64,42);ctx.fillStyle='#ba8c50';ctx.beginPath();ctx.moveTo(s.x-41,s.y-12);ctx.lineTo(s.x,s.y-44);ctx.lineTo(s.x+41,s.y-12);ctx.closePath();ctx.fill();label('SHOP · planirano',s.x,s.y+50,'#d5bf8d',13);});
+    circle(1280,1280,145,'#42574c','#a5a285',4);circle(1280,1280,110,'#354449','#899f94',2);circle(1280,1280,72,'#4e4564','#b0a0d3',2);crystal(1280,1280,48);bunny(1280,1280,22,'#e7ddff');label('CENTRALNO JEZGRO',1280,1395,'#cfc2e1',17);
+    ctx.strokeStyle='#6c805e';ctx.lineWidth=8;ctx.strokeRect(0,0,WIDTH,HEIGHT);ctx=actual;return terrainCache;
   }
-  function render(now) {
-    const dpr = canvas.width / view.width; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, view.width, view.height);
-    ctx.save(); ctx.translate(view.width / 2, view.height / 2); ctx.scale(camera.scale, camera.scale); ctx.translate(-camera.x, -camera.y); drawGround();
-    for (const u of game.units) {
-      const color = TEAMS[u.owner].color;
-      if (selected.includes(u.id)) { circle(u.x, u.y + 5, 17, null, '#b4ffa5', 2); if (u.path.length) line([[u.x, u.y], ...u.path.map(p => [p.x, p.y])], '#8bc8a155', 1); }
-      circle(u.x, u.y + 7, 11, '#0c1e1f88');
-      if (u.type === 'scout') { ctx.save(); ctx.translate(u.x, u.y); ctx.rotate(-.4); ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(12, 13); ctx.lineTo(0, 8); ctx.lineTo(-12, 13); ctx.closePath(); ctx.fill(); ctx.restore(); bunny(u.x, u.y - 3, 8, '#e5ebdb'); }
-      else { circle(u.x, u.y + 3, 9, '#c79753', color, 2); bunny(u.x, u.y - 6, 8, '#ede8cf'); if (u.cargo) crystal(u.x + 9, u.y, 6); }
-      if (u.mode === 'harvest') { ctx.fillStyle = '#142927'; ctx.fillRect(u.x - 12, u.y - 26, 24, 3); ctx.fillStyle = '#71e2d4'; ctx.fillRect(u.x - 12, u.y - 26, 24 * u.work / RULES.harvestTicks, 3); }
+  function drawBuilding(b){const color=TEAMS[b.owner].color,d=BUILDINGS[b.type];ctx.save();ctx.translate(b.x,b.y);ctx.fillStyle=b.completed?'#253d3c':'#3b3d30';ctx.fillRect(-b.w/2,-b.h/2,b.w,b.h);ctx.strokeStyle=selected.includes(b.id)?'#c3ffb4':color;ctx.lineWidth=selected.includes(b.id)?3:2;ctx.strokeRect(-b.w/2,-b.h/2,b.w,b.h);
+    if(!b.completed){ctx.strokeStyle='#c7af72';ctx.lineWidth=2;for(let x=-b.w/2;x<b.w/2;x+=16)line([[x,-b.h/2],[x,b.h/2]],'#786e49',1);line([[-b.w/2,-b.h/2],[b.w/2,b.h/2]],'#b3a36c',2);line([[b.w/2,-b.h/2],[-b.w/2,b.h/2]],'#b3a36c',2);label(Math.floor(b.progress/b.duration*100)+'%',0,5,'#fff1bd',14);}
+    else if(b.type==='base'){ctx.fillStyle='#49676b';ctx.fillRect(-32,-28,64,50);bunny(0,-17,22,color);circle(0,28,9,color);}
+    else if(b.type==='relay'){crystal(0,0,14);}
+    else{ctx.fillStyle='#5f736a';ctx.fillRect(-28,-20,56,40);ctx.fillStyle='#14282c';ctx.fillRect(-12,0,24,20);line([[-33,-20],[0,-34],[33,-20]],color,4);}
+    label(d.name,0,b.h/2+19,color,b.type==='relay'?10:13);
+    if(!b.completed){ctx.fillStyle='#142727';ctx.fillRect(-b.w/2,b.h/2+26,b.w,5);ctx.fillStyle='#d6bd7b';ctx.fillRect(-b.w/2,b.h/2+26,b.w*b.progress/b.duration,5);}
+    ctx.restore();}
+  function render(now){const dpr=canvas.width/view.width;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#10271f';ctx.fillRect(0,0,view.width,view.height);ctx.save();ctx.translate(view.width/2,view.height/2);ctx.scale(camera.scale,camera.scale);ctx.translate(-camera.x,-camera.y);ctx.drawImage(terrain(),0,0);
+    if(buildMode){for(const z of game.map.zones.filter(z=>z.owner===game.active)){ctx.fillStyle='#75d8a514';ctx.fillRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);ctx.setLineDash([8,8]);ctx.strokeStyle='#8bddb6';ctx.lineWidth=2;ctx.strokeRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);ctx.setLineDash([]);}}
+    game.nodes.forEach(n=>{if(selected.includes(n.id))circle(n.x,n.y,21,null,'#baffb4',2);crystal(n.x,n.y,13,!n.remaining);crystal(n.x+9,n.y+5,8,!n.remaining);});game.buildings.forEach(drawBuilding);
+    for(const u of game.units){const color=TEAMS[u.owner].color;if(selected.includes(u.id)){circle(u.x,u.y+5,17,null,'#b9ffa6',2);if(u.path.length)line([[u.x,u.y],...u.path.map(p=>[p.x,p.y])],'#a2dc9b66',1);}
+      circle(u.x,u.y+7,11,'#0c1e1f88');if(u.type==='scout'){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(u.x,u.y-18);ctx.lineTo(u.x+12,u.y+13);ctx.lineTo(u.x-12,u.y+13);ctx.closePath();ctx.fill();bunny(u.x,u.y-3,8,'#e5ebdb');}
+      else{circle(u.x,u.y+3,9,'#c79753',color,2);bunny(u.x,u.y-6,8,'#ede8cf');if(u.cargo)crystal(u.x+9,u.y,6);}
+      if(u.mode==='harvest'){ctx.fillStyle='#142927';ctx.fillRect(u.x-12,u.y-26,24,3);ctx.fillStyle='#71e2d4';ctx.fillRect(u.x-12,u.y-26,24*u.work/60,3);}
+      if(u.mode==='build')label('⚒',u.x+15,u.y-10,'#f4d28f',15);
     }
-    if (orderMarker && now < orderMarker.until) { const r = 12 + (orderMarker.until - now) / 55; circle(orderMarker.x, orderMarker.y, r, null, '#a7f5b7', 2); }
-    ctx.restore();
-    if (pointer && distance(pointer.start, pointer.end) > 5) { ctx.fillStyle = '#81e5b922'; ctx.strokeStyle = '#a6efc5'; ctx.lineWidth = 1; const w = pointer.end.x - pointer.start.x, h = pointer.end.y - pointer.start.y; ctx.fillRect(pointer.start.x, pointer.start.y, w, h); ctx.strokeRect(pointer.start.x, pointer.start.y, w, h); }
-    mctx.fillStyle = '#243e32'; mctx.fillRect(0, 0, mini.width, mini.height); const sx = mini.width / WIDTH, sy = mini.height / HEIGHT;
-    mctx.fillStyle = '#122b23'; game.blocked.forEach((v, i) => { if (v) mctx.fillRect((i % RULES.cols) * RULES.cell * sx, Math.floor(i / RULES.cols) * RULES.cell * sy, RULES.cell * sx, RULES.cell * sy); });
-    mctx.strokeStyle = '#888e6a'; mctx.lineWidth = 3; mctx.beginPath(); mctx.moveTo(0, mini.height / 2); mctx.lineTo(mini.width, mini.height / 2); mctx.moveTo(mini.width / 2, 0); mctx.lineTo(mini.width / 2, mini.height); mctx.stroke();
-    game.bases.forEach(b => { mctx.fillStyle = TEAMS[b.owner].color; mctx.fillRect(b.x * sx - 5, b.y * sy - 4, 10, 8); });
-    game.units.forEach(u => { mctx.fillStyle = TEAMS[u.owner].color; mctx.fillRect(u.x * sx - 1, u.y * sy - 1, 2, 2); });
-    mctx.strokeStyle = '#d6ecdd'; mctx.lineWidth = 1; mctx.strokeRect((camera.x - view.width / camera.scale / 2) * sx, (camera.y - view.height / camera.scale / 2) * sy, view.width / camera.scale * sx, view.height / camera.scale * sy);
+    if(buildMode&&preview){ctx.fillStyle=preview.error?'#e7686344':'#8febad44';ctx.strokeStyle=preview.error?'#ff9e98':'#b0ffd0';ctx.lineWidth=2;ctx.fillRect(preview.x-preview.w/2,preview.y-preview.h/2,preview.w,preview.h);ctx.strokeRect(preview.x-preview.w/2,preview.y-preview.h/2,preview.w,preview.h);}
+    if(orderMarker&&now<orderMarker.until)circle(orderMarker.x,orderMarker.y,12+(orderMarker.until-now)/55,null,'#c6efad',2);ctx.restore();
+    if(pointer&&distance(pointer.start,pointer.end)>5){ctx.fillStyle='#81e5b922';ctx.strokeStyle='#a6efc5';ctx.lineWidth=1;ctx.fillRect(pointer.start.x,pointer.start.y,pointer.end.x-pointer.start.x,pointer.end.y-pointer.start.y);ctx.strokeRect(pointer.start.x,pointer.start.y,pointer.end.x-pointer.start.x,pointer.end.y-pointer.start.y);}
+    mctx.drawImage(terrain(),0,0,mini.width,mini.height);const sx=mini.width/WIDTH,sy=mini.height/HEIGHT;for(const b of game.buildings){mctx.fillStyle=TEAMS[b.owner].color;mctx.fillRect(b.x*sx-3,b.y*sy-3,6,6);}for(const u of game.units){mctx.fillStyle=TEAMS[u.owner].color;mctx.fillRect(u.x*sx-1,u.y*sy-1,2,2);}mctx.strokeStyle='#dcf6d9';mctx.lineWidth=1;mctx.strokeRect((camera.x-view.width/camera.scale/2)*sx,(camera.y-view.height/camera.scale/2)*sy,view.width/camera.scale*sx,view.height/camera.scale*sy);
   }
-  function frame(time) {
-    const elapsed = lastTime ? Math.max(0, time - lastTime) : 0; lastTime = time;
-    // A hidden tab freezes this LOCAL sandbox; no elapsed wall-time income is fabricated.
-    if (!document.hidden && started && !game.paused) {
-      accumulator += Math.min(elapsed, 1000);
-      let count = 0; while (accumulator >= 1000 / RULES.hz && count++ < 20) { step(game); accumulator -= 1000 / RULES.hz; }
-    } else accumulator = 0;
-    const movement = Math.min(elapsed, 100) * .6 / camera.scale;
-    if (keys.has('ArrowLeft')) camera.x -= movement; if (keys.has('ArrowRight')) camera.x += movement; if (keys.has('ArrowUp')) camera.y -= movement; if (keys.has('ArrowDown')) camera.y += movement;
-    camera.x = clamp(camera.x, 0, WIDTH); camera.y = clamp(camera.y, 0, HEIGHT);
-    render(time); updateHUD(); requestAnimationFrame(frame);
-  }
-  document.addEventListener('visibilitychange', () => { lastTime = 0; accumulator = 0; keys.clear(); if (document.hidden && started && !game.paused) pause(); });
-  window.addEventListener('resize', resize); resize(); updateHUD(); requestAnimationFrame(frame);
-  // Small read-only diagnostics for reproducible browser tests.
-  root.WHR = Object.freeze({ snapshot: () => JSON.parse(JSON.stringify({ tick: game.tick, active: game.active, running: game.running, paused: game.paused, players: game.players, units: game.units, nodes: game.nodes, selected })) });
-})(typeof window !== 'undefined' ? window : globalThis);
+  function frame(time){const elapsed=lastTime?Math.max(0,time-lastTime):0;lastTime=time;if(!document.hidden&&started&&!game.paused){accumulator+=Math.min(elapsed,1000);let count=0;while(accumulator>=50&&count++<20){step(game);accumulator-=50;}}else accumulator=0;
+    const movement=Math.min(elapsed,100)*.6/camera.scale;if(keys.has('ArrowLeft'))camera.x-=movement;if(keys.has('ArrowRight'))camera.x+=movement;if(keys.has('ArrowUp'))camera.y-=movement;if(keys.has('ArrowDown'))camera.y+=movement;camera.x=clamp(camera.x,0,WIDTH);camera.y=clamp(camera.y,0,HEIGHT);if(buildMode)updatePreview();render(time);updateHUD();requestAnimationFrame(frame);}
+  document.addEventListener('visibilitychange',()=>{lastTime=0;accumulator=0;keys.clear();if(document.hidden&&started&&!game.paused)pause();});window.addEventListener('resize',resize);resize();updateHUD();requestAnimationFrame(frame);
+  root.WHR=Object.freeze({snapshot:()=>JSON.parse(JSON.stringify({tick:game.tick,active:game.active,running:game.running,paused:game.paused,players:game.players,units:game.units,nodes:game.nodes,buildings:game.buildings,selected,camera,view,buildMode,preview:preview?{x:preview.x,y:preview.y,w:preview.w,h:preview.h,error:preview.error}:null,world:{width:WIDTH,height:HEIGHT},zones:game.map.zones}))});
+})(typeof window!=='undefined'?window:globalThis);
