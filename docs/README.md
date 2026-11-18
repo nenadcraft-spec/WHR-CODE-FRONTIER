@@ -4,6 +4,7 @@
 
 ## MASTER dokumenti
 
+- [Mapa i pravila](WHR_RTS_MAPA_PRAVILA_MASTER_v1_0_2026-11-18.md)
 - [Ekonomija i vreme](WHR_RTS_RESURS_VREME_MASTER_v1_0_2026-11-18.md)
 - [Tier 1](WHR_RTS_TIER_1_MASTER_v1_0_2026-11-18.md)
 - [Tier 2](WHR_RTS_TIER_2_MASTER_v1_0_2026-11-18.md)
