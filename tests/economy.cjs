@@ -7,7 +7,7 @@ function total(g){return g.players.reduce((s,p)=>s+p.code,0)+g.nodes.reduce((s,n
 let checks=0;
 function test(name,f){f();checks++;console.log('PASS '+name);}
 test('initial state: four equal economies, three workers, finite stock',()=>{
- const g=createGame();assert.equal(g.units.length,12);assert.equal(g.nodes.length,24);
+ const g=createGame();assert.equal(g.units.length,12);assert.equal(g.nodes.length,48);
  for(let owner=0;owner<4;owner++){assert.equal(g.players[owner].code,100);assert.equal(g.units.filter(u=>u.owner===owner).length,3);}
  step(g);assert.equal(g.tick,0);
 });
@@ -50,9 +50,9 @@ test('stop preserves cargo and releases mining slot, then gather deposits once',
  const miners=g.nodes.filter(n=>n.miner===u.id);assert.ok(miners.length<=1);
 });
 test('pathfinding avoids blocked cells and normalizes forest destination',()=>{
- const g=live();const blocked=g.blocked.findIndex(v=>v);const target={x:(blocked%40)*40+20,y:Math.floor(blocked/40)*40+20};
- const path=pathfind(g.blocked,{x:170,y:170},target);assert.ok(path.length>0);
- for(const p of path)assert.equal(g.blocked[Math.floor(p.y/40)*40+Math.floor(p.x/40)],0);
+ const g=live();const blocked=g.blocked.findIndex((v,i)=>v&&i>RULES.cols*40);const target={x:(blocked%RULES.cols)*RULES.cell+8,y:Math.floor(blocked/RULES.cols)*RULES.cell+8};
+ const path=pathfind(g.blocked,g.units[0],target);assert.ok(path.length>0);
+ for(const p of path)assert.equal(g.blocked[Math.floor(p.y/RULES.cell)*RULES.cols+Math.floor(p.x/RULES.cell)],0);
 });
 test('same tick and command sequence is reproducible',()=>{
  const a=live(),b=live();for(const g of[a,b]){purchase(g,0,'worker');run(g,1000);command(g,0,[g.units[0].id],'stop');run(g,200);}
