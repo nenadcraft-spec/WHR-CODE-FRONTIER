@@ -1,6 +1,6 @@
 # WHR CODE FRONTIER — pravila i razvoj
 
-[Prototip 0.1 i njegove granice](../PROTOTYPE.md) · [Pokreni klijent](../index.html)
+[Prototip 0.2: mapa, gradnja i granice](PROTOTYPE_0_2.md) · [Pokreni klijent](../index.html)
 
 ## MASTER dokumenti
 
@@ -20,3 +20,4 @@ Sve brojke su kandidati za balans. Specifikacija cele igre ne znači da sve funk
 ## Razvoj
 
 Prvi lokalni korak: mapa, kamera, selekcija, radnici, CODE, proizvodnja i Scout. Slede gradnja/borba, džungla/heroji i inventar, T2/T3, pa autoritativni multiplayer i lobi. Koncept slike tek treba dodati kao stvarne grafičke asset fajlove. GitHub Pages služi klijent, ne zamenjuje multiplayer server.
+
