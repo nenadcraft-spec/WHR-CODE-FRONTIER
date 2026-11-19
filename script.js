@@ -1,4 +1,4 @@
-/* WHR CODE FRONTIER · 0.4 · T1/T2 local simulation candidate. */
+/* WHR CODE FRONTIER · 0.5 · T1/T2 local simulation candidate. */
 (function (root) {
   'use strict';
   const RULES = Object.freeze({ hz: 20, cell: 16, cols: 160, rows: 160, workerCost: 50, scoutCost: 75,
@@ -83,6 +83,56 @@
       }
     }return -1;
   }
+  // Navigation geometry belongs to the simulation; render scale never changes it.
+  const navMasks=new WeakMap();
+  function unitRadius(u){return u.type==='breaker'?19.2:u.type==='worker'||u.type==='scout'?5.6:7.2;}
+  function diskClear(blocked,p,r){
+    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x-r<0||p.y-r<0||p.x+r>WIDTH||p.y+r>HEIGHT)return false;
+    for(let y=Math.max(0,Math.floor((p.y-r)/16));y<=Math.min(159,Math.floor((p.y+r)/16));y++)for(let x=Math.max(0,Math.floor((p.x-r)/16));x<=Math.min(159,Math.floor((p.x+r)/16));x++)if(blocked[y*160+x]){
+      const qx=clamp(p.x,x*16,x*16+16),qy=clamp(p.y,y*16,y*16+16);if((p.x-qx)**2+(p.y-qy)**2<r*r-1e-8)return false;
+    }return true;
+  }
+  function clearanceMask(blocked,r){let cache=navMasks.get(blocked);if(!cache){cache=new Map();navMasks.set(blocked,cache);}if(cache.has(r))return cache.get(r);
+    const mask=new Uint8Array(blocked.length);for(let i=0;i<mask.length;i++)mask[i]=diskClear(blocked,cellPoint(i),r)?0:1;cache.set(r,mask);return mask;
+  }
+  function staticSegment(blocked,a,b,r){
+    if(!diskClear(blocked,a,r)||!diskClear(blocked,b,r))return false;
+    for(let y=Math.max(0,Math.floor((Math.min(a.y,b.y)-r)/16));y<=Math.min(159,Math.floor((Math.max(a.y,b.y)+r)/16));y++)for(let x=Math.max(0,Math.floor((Math.min(a.x,b.x)-r)/16));x<=Math.min(159,Math.floor((Math.max(a.x,b.x)+r)/16));x++)if(blocked[y*160+x]){
+      const lo={x:x*16,y:y*16},hi={x:x*16+16,y:y*16+16};let enter=0,leave=1,intersects=true;
+      for(const axis of ['x','y']){const delta=b[axis]-a[axis];if(Math.abs(delta)<1e-12){if(a[axis]<lo[axis]||a[axis]>hi[axis])intersects=false;}else{const t1=(lo[axis]-a[axis])/delta,t2=(hi[axis]-a[axis])/delta;enter=Math.max(enter,Math.min(t1,t2));leave=Math.min(leave,Math.max(t1,t2));}}
+      if(intersects&&enter<=leave)return false;
+      const endpoint=p=>Math.hypot(p.x-clamp(p.x,lo.x,hi.x),p.y-clamp(p.y,lo.y,hi.y));
+      const d=Math.min(endpoint(a),endpoint(b),...[[lo.x,lo.y],[lo.x,hi.y],[hi.x,lo.y],[hi.x,hi.y]].map(([x,y])=>segmentDistance({x,y},a,b)));
+      if(d<r-1e-7)return false;
+    }return true;
+  }
+  function unitPath(g,u,to,strict=false,blocked=g.blocked){
+    const r=unitRadius(u),mask=clearanceMask(blocked,r);if(!to||!Number.isFinite(to.x)||!Number.isFinite(to.y)||!diskClear(blocked,u,r))return null;
+    if(strict&&!diskClear(blocked,to,r))return null;
+    const path=pathfind(mask,u,to,strict);if(!path)return null;
+    // A* nodes are safe cell centers. Exact start and final offsets need their own check.
+    const start=cellPoint(cellIndex(u.x,u.y));if(distance(u,start)>1e-6)path.unshift(start);
+    if(path.length&&!diskClear(blocked,path.at(-1),r))path[path.length-1]=cellPoint(cellIndex(path.at(-1).x,path.at(-1).y));
+    let prev=u;for(const p of path){if(!staticSegment(blocked,prev,p,r))return null;prev=p;}return path;
+  }
+  function segmentDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}
+  function motionClear(g,u,p){const r=unitRadius(u);if(!staticSegment(g.blocked,u,p,r))return false;
+    for(const v of [...g.units,...(g.neutrals||[])]){if(v===u||v.hp<=0||v.flying!==u.flying&&(v.flying||u.flying))continue;const limit=r+unitRadius(v),before=distance(u,v);
+      if(before<limit-1e-6){if(distance(p,v)<=before+1e-7)return false;}
+      else if(segmentDistance(v,u,p)<limit-1e-6)return false;
+    }return true;
+  }
+  function freeArrival(g,u,p,reserved=[]){return diskClear(g.blocked,p,unitRadius(u))&&![...g.units,...(g.neutrals||[]),...reserved].some(v=>v!==u&&distance(v,p)<unitRadius(u)+unitRadius(v)+0.25);}
+  function formationTargets(g,units,target){const slots=new Map(),reserved=[];
+    for(const u of [...units].sort((a,b)=>unitRadius(b)-unitRadius(a)||(a.id<b.id?-1:a.id>b.id?1:0))){let attempts=0,found=false;
+      for(let ring=0;ring<=16&&!found;ring++)for(let dy=-ring;dy<=ring&&!found;dy++)for(let dx=-ring;dx<=ring&&!found;dx++){
+        if(Math.max(Math.abs(dx),Math.abs(dy))!==ring)continue;const p={x:clamp(target.x,1,WIDTH-1)+dx*16,y:clamp(target.y,1,HEIGHT-1)+dy*16};
+        if(!freeArrival(g,u,p,reserved)||reserved.some(v=>distance(v,p)<unitRadius(u)+unitRadius(v)+12))continue;if(++attempts>32)break;
+        if(!unitPath(g,u,p,true))continue;slots.set(u.id,p);reserved.push({...p,type:u.type});found=true;
+      }
+    }return slots;
+  }
+
   function pathfind(blocked,from,to,strict=false) {
     if(!to||!Number.isFinite(to.x)||!Number.isFinite(to.y))return null;
     if(from.x<0||from.y<0||from.x>=WIDTH||from.y>=HEIGHT||strict&&(to.x<0||to.y<0||to.x>=WIDTH||to.y>=HEIGHT))return null;
@@ -114,35 +164,35 @@
       addField(t,'home');addField(map.expansions[owner],'expansion');
     });rebuildNavigation(game);
     TEAMS.forEach((t,owner)=>{for(let n=0;n<3;n++)spawn(game,owner,'worker',game.bases[owner],n);});armyInit(game);return game;}
-  function exitPoints(b){const out=[];for(let x=b.x-b.w/2-8;x<=b.x+b.w/2+8;x+=16)out.push({x,y:b.y-b.h/2-8},{x,y:b.y+b.h/2+8});
-    for(let y=b.y-b.h/2+8;y<=b.y+b.h/2-8;y+=16)out.push({x:b.x-b.w/2-8,y},{x:b.x+b.w/2+8,y});return out;}
-  function availableExit(game,b){const toward={x:b.x,y:b.y+(b.owner<2?-112:112)};return exitPoints(b).filter(p=>p.x>0&&p.y>0&&p.x<WIDTH&&p.y<HEIGHT&&!game.blocked[cellIndex(p.x,p.y)]).sort((a,c)=>distance(a,toward)-distance(c,toward))
-    .find(p=>!game.units.some(u=>distance(u,p)<14));}
-  function spawn(game,owner,type,base=game.bases[owner],initial=-1){let p=initial>=0?{x:base.x+(owner%2?-1:1)*((initial-1)*32+8),y:base.y+(owner<2?-72:72)}:availableExit(game,base);
+  function exitPoints(b,margin=8){const out=[];for(let x=b.x-b.w/2-margin;x<=b.x+b.w/2+margin;x+=16)out.push({x,y:b.y-b.h/2-margin},{x,y:b.y+b.h/2+margin});
+    for(let y=b.y-b.h/2+margin;y<=b.y+b.h/2-margin;y+=16)out.push({x:b.x-b.w/2-margin,y},{x:b.x+b.w/2+margin,y});return out;}
+  function availableExit(game,b,type='worker'){const u={type},margin=Math.max(8,Math.ceil((unitRadius(u)-8)/16)*16+8),toward={x:b.x,y:b.y+(b.owner<2?-112:112)};
+    return exitPoints(b,margin).filter(p=>freeArrival(game,u,p)).sort((a,c)=>distance(a,toward)-distance(c,toward))[0];}
+  function spawn(game,owner,type,base=game.bases.find(b=>b.owner===owner),initial=-1){let p=initial>=0?{x:base.x+(owner%2?-1:1)*((initial-1)*32+8),y:base.y+(owner<2?-72:72)}:availableExit(game,base,type);
     if(!p)return null;const u={id:'u'+game.nextId++,type,owner,...p,hp:UNIT[type]?.hp||100,cargo:0,mode:'idle',path:[],nodeId:null,work:0,jobId:null,dest:null,pathRevision:game.navRevision};unitExtras(u);if(type==='guard'&&game.players[owner]?.research?.guards)u.hp=210;game.units.push(u);
     if(type==='worker')assignGather(game,u,initial>=0?game.nodes.filter(n=>n.owner===owner&&n.field==='home')[initial]:null);return u;}
   function releaseNode(game,u){const n=game.nodes.find(n=>n.id===u.nodeId);if(n&&n.miner===u.id)n.miner=null;u.work=0;}
   function releaseJob(game,u){if(u.jobId){const b=game.buildings.find(b=>b.id===u.jobId);if(b&&b.builderId===u.id)b.builderId=null;u.jobId=null;}}
-  function moveTo(game,u,p,mode,strict=false){const path=pathfind(game.blocked,u,p,strict);u.path=path||[];u.dest=p;u.pathRevision=game.navRevision;u.mode=path?mode:'blocked';u.resumeMode=mode;return !!path;}
+  function moveTo(game,u,p,mode,strict=false){const path=unitPath(game,u,p,strict);u.path=path||[];u.dest=p;u.pathRevision=game.navRevision;u.mode=path?mode:'blocked';u.resumeMode=mode;return !!path;}
   function pickNode(game,u){return game.nodes.filter(n=>n.owner===u.owner&&n.remaining>0).sort((a,b)=>(distance(a,u)+(a.miner?48:0))-(distance(b,u)+(b.miner?48:0)))[0];}
   function returnCargo(game,u){const bases=game.bases.filter(b=>b.owner===u.owner&&b.completed).sort((a,b)=>distance(a,u)-distance(b,u));
     for(const b of bases){const points=exitPoints(b).filter(p=>!game.blocked[cellIndex(p.x,p.y)]).sort((a,b)=>distance(a,u)-distance(b,u));
-      for(const p of points){const path=pathfind(game.blocked,u,p,true);if(path){u.path=path;u.dest=p;u.mode='return';u.resumeMode='return';u.pathRevision=game.navRevision;return true;}}}
+      for(const p of points){const path=unitPath(game,u,p,true);if(path){u.path=path;u.dest=p;u.mode='return';u.resumeMode='return';u.pathRevision=game.navRevision;return true;}}}
     u.path=[];u.mode='blocked';u.resumeMode='return';return false;}
   function assignGather(game,u,node=null){if(u.type!=='worker')return false;releaseNode(game,u);releaseJob(game,u);
     node=node&&game.nodes.includes(node)&&node.remaining>0?node:pickNode(game,u);u.nodeId=node?node.id:null;
     if(u.cargo)return returnCargo(game,u);if(!node){u.mode='idle';u.path=[];return false;}
     return moveTo(game,u,{x:node.x+(node.owner%2?-8:8),y:node.y+(node.owner<2?24:-24)},'toNode',true);}
-  function command(game,owner,ids,action,target){if(!game.running||game.paused||owner!==game.active||game.players[owner].defeated)return false;if(action==='attack')return attackCommand(game,owner,ids,target);let changed=false;
+  function command(game,owner,ids,action,target){if(!game.running||game.paused||owner!==game.active||game.players[owner].defeated)return false;if(action==='attack')return attackCommand(game,owner,ids,target);let changed=false;const movers=game.units.filter(u=>u.owner===owner&&ids.includes(u.id)),slots=action==='move'&&movers.length>1&&target&&Number.isFinite(target.x)&&Number.isFinite(target.y)?formationTargets(game,movers,target):null;
     for(const u of game.units.filter(u=>u.owner===owner&&ids.includes(u.id))){
       if(action==='gather'&&u.type==='worker'){u.targetId=null;u.channel=null;assignGather(game,u,target);changed=true;}
-      if(action==='move'){if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))continue;u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.nodeId=null;moveTo(game,u,target,'move');changed=true;}
+      if(action==='move'){if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))continue;u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.nodeId=null;const goal=slots?slots.get(u.id):target;if(goal)moveTo(game,u,goal,'move');else{u.path=[];u.dest=target;u.mode='blocked';u.resumeMode='move';}changed=true;}
       if(action==='stop'){u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.path=[];u.dest=null;u.mode='idle';u.nodeId=null;changed=true;}
     }return changed;}
   const supplyCap=(game,owner)=>Math.min(tierOf(game,owner)>=2?40:20,10+5*game.buildings.filter(b=>b.owner===owner&&b.type==='relay'&&b.completed).length);
   const orders=(game,owner)=>game.buildings.filter(b=>b.owner===owner).flatMap(b=>b.queue);
   function purchase(game,owner,type,baseId='base'+owner){const reason=productionReason(game,owner,type,baseId);if(reason)return reason;const d=UNIT[type],b=game.buildings.find(b=>b.id===baseId);game.players[owner].code-=d.cost;b.queue.push({type,remaining:d.ticks,duration:d.ticks});return null;}
-  function approaches(blocked,r,from){return exitPoints(r).filter(p=>p.x>=0&&p.y>=0&&p.x<WIDTH&&p.y<HEIGHT&&!blocked[cellIndex(p.x,p.y)])
+  function approaches(blocked,r,from){return exitPoints(r,Math.max(8,Math.ceil((unitRadius(from)-8)/16)*16+8)).filter(p=>p.x>=0&&p.y>=0&&p.x<WIDTH&&p.y<HEIGHT&&!blocked[cellIndex(p.x,p.y)])
     .sort((a,b)=>distance(a,from)-distance(b,from));}
   function placement(game,owner,type,p,workerId){const d=BUILDINGS[type];if(!d||!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return{error:'Nevažeća građevina ili lokacija.'};
     if(d.tier&&tierOf(game,owner)<d.tier)return{error:'Potreban T2.'};if(type==='tower'&&game.buildings.filter(b=>b.owner===owner&&b.type==='tower').length>=2)return{error:'Limit dve kule.'};
@@ -153,10 +203,10 @@
     if(cells.some(i=>game.map.noBuild[i]))return fail('Sačuvaj rampu, glavni put i radnički prolaz.');
     if(cells.some(i=>game.blocked[i]))return fail('Preklapanje sa objektom, CODE-om ili neprohodnim terenom.');
     if(game.map.camps.some(c=>inside(c,r,90))||game.map.shops.some(s=>inside(s,r,65)))return fail('Neutralna lokacija mora ostati slobodna.');
-    if(game.units.some(u=>inside(u,r,12)))return fail('Jedinica stoji na gradilištu.');
+    if(game.units.some(u=>{const dx=u.x-clamp(u.x,r.x-r.w/2,r.x+r.w/2),dy=u.y-clamp(u.y,r.y-r.h/2,r.y+r.h/2);return dx*dx+dy*dy<unitRadius(u)**2;}))return fail('Jedinica stoji na gradilištu.');
     const worker=game.units.find(u=>u.id===workerId&&u.owner===owner&&u.type==='worker');if(!worker)return fail('Izaberi svog radnika za gradnju.');
     const blocked=game.blocked.slice();for(const i of cells)blocked[i]=1;
-    for(const point of approaches(blocked,r,worker)){const path=pathfind(blocked,worker,point,true);if(path)return{...r,error:null,point,path};}
+    for(const point of approaches(blocked,r,worker)){const path=unitPath(game,worker,point,true,blocked);if(path)return{...r,error:null,point,path};}
     return fail('Radnik nema pristup gradilištu.');}
   function beginBuild(game,owner,workerId,type,p){if(!game.running||game.paused)return{error:'Pokreni ili nastavi poligon.'};if(owner!==game.active||game.players[owner].defeated)return{error:'Nemaš kontrolu nad tom bazom.'};
     const check=placement(game,owner,type,p,workerId);if(check.error)return check;const d=BUILDINGS[type];if(game.players[owner].code<d.cost)return{error:'Nedovoljno CODE-a.'};
@@ -164,16 +214,21 @@
     game.buildings.push(b);if(type==='base')game.bases.push(b);b.builderId=u.id;u.jobId=b.id;rebuildNavigation(game);u.path=check.path;u.dest=check.point;u.mode='toBuild';u.pathRevision=game.navRevision;return{building:b,error:null};}
   function resumeBuild(game,owner,workerId,buildingId){if(!game.running||game.paused||owner!==game.active)return false;const u=game.units.find(u=>u.id===workerId&&u.owner===owner&&u.type==='worker'),b=game.buildings.find(b=>b.id===buildingId&&b.owner===owner&&!b.completed);
     if(!u||!b||(b.builderId&&b.builderId!==u.id))return false;
-    for(const p of approaches(game.blocked,b,u)){const path=pathfind(game.blocked,u,p,true);if(!path)continue;releaseNode(game,u);releaseJob(game,u);b.builderId=u.id;u.jobId=b.id;u.path=path;u.dest=p;u.mode='toBuild';u.pathRevision=game.navRevision;return true;}return false;}
+    for(const p of approaches(game.blocked,b,u)){const path=unitPath(game,u,p,true);if(!path)continue;releaseNode(game,u);releaseJob(game,u);b.builderId=u.id;u.jobId=b.id;u.path=path;u.dest=p;u.mode='toBuild';u.pathRevision=game.navRevision;return true;}return false;}
   function cancelBuild(game,owner,id){if(!game.running||game.paused||owner!==game.active)return false;const b=game.buildings.find(b=>b.id===id&&b.owner===owner&&!b.completed);if(!b)return false;
     const u=game.units.find(u=>u.id===b.builderId);game.players[owner].code+=Math.floor(BUILDINGS[b.type].cost*(b.progress?0.75:1));game.buildings=game.buildings.filter(x=>x!==b);game.bases=game.bases.filter(x=>x!==b);rebuildNavigation(game);
     if(u){u.jobId=null;assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}return true;}
-  function travel(u,speed){let remaining=speed/RULES.hz;while(u.path.length&&remaining>0){const p=u.path[0],d=distance(u,p);if(d<=remaining){u.x=p.x;u.y=p.y;u.path.shift();remaining-=d;}else{u.x+=(p.x-u.x)/d*remaining;u.y+=(p.y-u.y)/d*remaining;remaining=0;}}}
+  function travel(game,u,speed){let remaining=speed/RULES.hz,moved=false;
+    while(u.path.length&&remaining>1e-6){while(u.path.length>1&&distance(u,u.path[1])<96&&staticSegment(game.blocked,u,u.path[1],unitRadius(u)))u.path.shift();const goal=u.path[0],d=distance(u,goal);if(d<1e-5){u.path.shift();continue;}const length=Math.min(remaining,d,2),angle=Math.atan2(goal.y-u.y,goal.x-u.x),side=u.avoidSide||((u.owner===1||u.owner===2)?-1:1);
+      let next=null;for(const turn of [0,side*Math.PI/4,-side*Math.PI/4,side*Math.PI/2,-side*Math.PI/2]){const p={x:u.x+Math.cos(angle+turn)*length,y:u.y+Math.sin(angle+turn)*length};if(motionClear(game,u,p)){next=p;if(turn)u.avoidSide=Math.sign(turn);break;}}
+      if(!next)break;u.x=next.x;u.y=next.y;remaining-=length;moved=true;if(distance(u,goal)<1e-5)u.path.shift();
+    }u.trafficWait=moved?0:(u.trafficWait||0)+1;return moved;
+  }
   function step(game){if(!game.running||game.paused)return;game.tick++;
     for(const u of game.units){
       if(u.path.length&&u.pathRevision!==game.navRevision){moveTo(game,u,u.dest,u.mode,true);}
       if(u.mode==='blocked'){if(game.tick%20===0){if(u.jobId)resumeBuild(game,u.owner,u.id,u.jobId);else if(u.cargo)returnCargo(game,u);else if(u.nodeId)assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));else if(u.dest)moveTo(game,u,u.dest,u.resumeMode);}continue;}
-      if(u.path.length){travel(u,unitSpeed(game,u));continue;}
+      if(u.path.length){travel(game,u,unitSpeed(game,u));continue;}
       if(u.mode==='move')u.mode='idle';
       else if(u.mode==='toBuild'||u.mode==='build'){const b=game.buildings.find(b=>b.id===u.jobId);if(!b||b.completed||b.builderId!==u.id){releaseJob(game,u);u.mode='idle';continue;}
         u.mode='build';b.progress++;b.hp=Math.max(1,Math.round(BUILDINGS[b.type].hp*b.progress/b.duration));if(b.progress>=b.duration){b.completed=true;b.builderId=null;u.jobId=null;assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}}
@@ -300,7 +355,7 @@
   function pickupLoot(g,o,id,lootId){const u=g.units.find(u=>u.id===id&&u.owner===o),l=g.loot.find(l=>l.id===lootId);if(!g.running||g.paused||o!==g.active||!u||!l||distance(u,l)>32)return'Priđi plenu na 2 jedinice.';if(l.owner!==o&&l.owner!==-1&&g.tick<l.unlockAt)return'Plen je još rezervisan za drugog igrača.';
     const item=l.items.find(i=>canCarry(u,i.type)&&u.inventory.length<inventoryCapacity(u));if(!item)return'Nema mesta ili odgovarajućeg predmeta.';u.inventory.push(item);l.items=l.items.filter(i=>i!==item);if(!l.items.length)g.loot=g.loot.filter(x=>x!==l);return null;}
   function interactMove(g,o,ids,target){if(!g.running||g.paused||o!==g.active||!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))return false;const cells=[];for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const p={x:Math.floor(target.x/16)*16+8+dx*16,y:Math.floor(target.y/16)*16+8+dy*16};if(distance(p,target)<=32&&p.x>0&&p.y>0&&p.x<WIDTH&&p.y<HEIGHT&&!g.blocked[cellIndex(p.x,p.y)])cells.push(p);}
-    for(const u of g.units.filter(u=>u.owner===o&&ids.includes(u.id))){for(const p of cells.sort((a,b)=>distance(a,u)-distance(b,u))){const path=pathfind(g.blocked,u,p,true);if(path){command(g,o,[u.id],'move',p);break;}}}return true;}
+    for(const u of g.units.filter(u=>u.owner===o&&ids.includes(u.id))){for(const p of cells.sort((a,b)=>distance(a,u)-distance(b,u))){const path=unitPath(g,u,p,true);if(path){command(g,o,[u.id],'move',p);break;}}}return true;}
   function startRepair(g,o,id,targetId){const u=g.units.find(u=>u.id===id&&u.owner===o&&u.type==='worker'),b=g.buildings.find(b=>b.id===targetId&&b.owner===o&&b.completed);if(!g.running||g.paused||o!==g.active||!u||!b||b.hp>=maxHp(g,b))return'Izaberi oštećenu sopstvenu građevinu i radnika.';releaseNode(g,u);releaseJob(g,u);u.path=[];u.targetId=b.id;u.mode='repair';u.repairWork=0;return null;}
   function rewardCamp(g,c){const total=c.contribution.reduce((a,b)=>a+b,0);if(!total)return;const code=c.tier===1?30:60,xp=c.tier===1?40:90,raw=c.contribution.map(x=>x/total*code),pay=raw.map(Math.floor);let left=code-pay.reduce((a,b)=>a+b,0);const rank=raw.map((x,i)=>({i,f:x-pay[i]})).sort((a,b)=>b.f-a.f||a.i-b.i);for(let k=0;k<left;k++)pay[rank[k].i]++;
     for(let o=0;o<4;o++){if(g.players[o].defeated)continue;g.players[o].code+=pay[o];const h=g.units.find(u=>u.owner===o&&UNIT[u.type]?.hero&&distance(u,c)<=192);if(h)grantXP(g,h,xp*c.contribution[o]/total);}
@@ -322,7 +377,7 @@
         for(let ring=0;ring<=6&&slots.length<count;ring++)for(let dy=-ring;dy<=ring&&slots.length<count;dy++)for(let dx=-ring;dx<=ring&&slots.length<count;dx++){
           if(Math.max(Math.abs(dx),Math.abs(dy))!==ring)continue;
           const p={x:c.x+dx*16,y:c.y+dy*16};
-          if(p.x<16||p.y<16||p.x>=WIDTH-16||p.y>=HEIGHT-16||g.blocked[cellIndex(p.x,p.y)]||occupied.some(u=>distance(u,p)<24)||slots.some(q=>distance(q,p)<24))continue;
+          if(p.x<16||p.y<16||p.x>=WIDTH-16||p.y>=HEIGHT-16||!diskClear(g.blocked,p,7.2)||occupied.some(u=>distance(u,p)<7.2+unitRadius(u)+0.25)||slots.some(q=>distance(q,p)<24))continue;
           slots.push(p);
         }
         if(slots.length<count){c.nextSpawn=g.tick+20;continue;}
@@ -331,38 +386,38 @@
     const targets=()=>attackables(g);const healTargets=new Set();
     for(const u of [...g.units,...g.neutrals]){
       if(u.hp<=0)continue;
-      if(u.channel){const b=g.bases.find(b=>b.id===u.channel.baseId&&b.completed);if(!b){u.channel=null;u.mode='idle';}else if(--u.channel.remaining<=0){const p=availableExit(g,b);if(p){Object.assign(u,p);u.channel=null;u.mode='idle';}}continue;}
+      if(u.channel){const b=g.bases.find(b=>b.id===u.channel.baseId&&b.completed);if(!b){u.channel=null;u.mode='idle';}else if(--u.channel.remaining<=0){const p=availableExit(g,b,u.type);if(p){Object.assign(u,p);u.channel=null;u.mode='idle';}}continue;}
       if(u.healBuff){if(u.lastDamage>=u.healBuff.started)u.healBuff=null;else{u.hp=Math.min(maxHp(g,u),u.hp+0.5);if(--u.healBuff.remaining<=0)u.healBuff=null;}}
       if(g.slowFields?.some(f=>f.owner!==u.owner&&f.until>g.tick&&distance(f,u)<=64))u.slowUntil=g.tick+2;
       if(u.type==='medic'){const t=g.units.filter(t=>t!==u&&t.owner===u.owner&&t.hp<maxHp(g,t)&&g.tick-t.lastDamage>=60&&distance(u,t)<=64&&!healTargets.has(t.id)).sort((a,b)=>a.hp/maxHp(g,a)-b.hp/maxHp(g,b))[0];if(t){t.hp=Math.min(maxHp(g,t),t.hp+0.4);healTargets.add(t.id);}continue;}
       if(u.mode==='repair'){const b=g.buildings.find(b=>b.id===u.targetId&&b.owner===u.owner&&b.completed);if(!b||b.hp>=maxHp(g,b)){u.mode='idle';u.targetId=null;continue;}
-        if(edgeDistance(u,b)>20){if(g.tick%10===0||!u.path.length){const p=approaches(g.blocked,b,u)[0];if(p){u.path=pathfind(g.blocked,u,p,true)||[];u.dest=p;u.pathRevision=g.navRevision;}}continue;}
+        if(edgeDistance(u,b)>20){if(g.tick%10===0||!u.path.length){const p=approaches(g.blocked,b,u)[0];if(p){u.path=unitPath(g,u,p,true)||[];u.dest=p;u.pathRevision=g.navRevision;}}continue;}
         if(++u.repairWork>=20){u.repairWork=0;const amount=Math.min(10,maxHp(g,b)-b.hp);if(g.players[u.owner].code>=amount/10){g.players[u.owner].code-=amount/10;b.hp+=amount;}}continue;}
       if(u.campId){
         if(u.recoverUntil>g.tick){u.hp=Math.min(u.maxHp,u.hp+u.maxHp/100);continue;}
-        if(u.returning){const p=u.path[0];if(p){travel(u,40);}else{u.returning=false;u.recoverUntil=g.tick+100;u.hp=Math.max(1,u.hp);if(g.neutrals.filter(n=>n.campId===u.campId).every(n=>!n.targetId&&!n.returning&&distance(n,n.home)<2))g.map.camps.find(c=>c.id===u.campId).contribution=[0,0,0,0];}continue;}
+        if(u.returning){const p=u.path[0];if(p){travel(g,u,40);}else{u.returning=false;u.recoverUntil=g.tick+100;u.hp=Math.max(1,u.hp);if(g.neutrals.filter(n=>n.campId===u.campId).every(n=>!n.targetId&&!n.returning&&distance(n,n.home)<2))g.map.camps.find(c=>c.id===u.campId).contribution=[0,0,0,0];}continue;}
       }
       if(u.type==='worker'&&u.mode!=='attack')continue;
       const d=u.campId?{damage:u.damage,range:5,period:30,vision:4}:UNIT[u.type];if(!d?.damage||['move','toBuild','build','repair','channel'].includes(u.mode))continue;
       let t=targets().find(t=>t.id===u.targetId&&t.owner!==u.owner&&t.hp>0&&(u.owner<0||visibleTo(g,u.owner,t)));
       if(!t){t=targets().filter(t=>t!==u&&t.hp>0&&(u.owner<0?t.owner>=0: t.owner!==u.owner&&visibleTo(g,u.owner,t))&&(!t.flying||u.campId||u.type==='archer'&&tierOf(g,u.owner)>=2)&&!t.returning&&!(t.recoverUntil>g.tick)&&distance(u,t)<=d.vision*16).sort((a,b)=>distance(u,a)-distance(u,b))[0];u.targetId=t?.id||null;}
-      if(u.campId){if(t&&distance(u,u.home)<=160)u.lastContact=g.tick;if(distance(u,u.home)>160||!t&&g.tick-u.lastContact>=60){if(distance(u,u.home)>2){u.returning=true;u.targetId=null;u.path=pathfind(g.blocked,u,u.home)||[];}continue;}}
+      if(u.campId){if(t&&distance(u,u.home)<=160)u.lastContact=g.tick;if(distance(u,u.home)>160||!t&&g.tick-u.lastContact>=60){if(distance(u,u.home)>2){u.returning=true;u.targetId=null;u.path=unitPath(g,u,u.home)||[];}continue;}}
       if(t?.flying&&!u.campId&&!(u.type==='archer'&&tierOf(g,u.owner)>=2)){u.targetId=null;u.path=[];continue;}
       if(!t){if(u.mode==='attack'){u.mode='idle';u.path=[];}continue;}
-      if(edgeDistance(u,t)>d.range*16){if(u.owner>=0){if(g.tick%10===0||!u.path.length){const p=t.w?approaches(g.blocked,t,u)[0]:t;if(p){u.path=pathfind(g.blocked,u,p)||[];u.dest=p;u.pathRevision=g.navRevision;u.mode='attack';}}}else{u.path=pathfind(g.blocked,u,t)||[];travel(u,40);}continue;}
+      if(edgeDistance(u,t)>d.range*16){if(u.owner>=0){if(g.tick%10===0||!u.path.length){const p=t.w?approaches(g.blocked,t,u)[0]:t;if(p){u.path=unitPath(g,u,p)||[];u.dest=p;u.pathRevision=g.navRevision;u.mode='attack';}}}else{u.path=unitPath(g,u,t)||[];travel(g,u,40);}continue;}
       u.path=[];if(u.cooldown>g.tick)continue;u.cooldown=g.tick+d.period;damage(g,u,t,(t.w&&d.buildingDamage?d.buildingDamage:d.damage)+(d.hero?(u.level-1)*2:0));
     }
     for(const b of g.buildings.filter(b=>b.type==='tower'&&b.completed)){if(b.cooldown>g.tick)continue;const t=[...g.units,...g.neutrals].find(u=>u.owner!==b.owner&&(!u.flying||tierOf(g,b.owner)>=2)&&distance(b,u)<=128&&visibleTo(g,b.owner,u));if(t){damage(g,b,t,15);b.cooldown=g.tick+30;}}
     for(const c of g.map.camps.filter(c=>c.tier<=2&&c.generation&&c.nextSpawn===Infinity&&!g.neutrals.some(n=>n.campId===c.id))){rewardCamp(g,c);c.witnesses=[0,1,2,3].filter(o=>visibleTo(g,o,c));c.nextSpawn=g.tick+(c.tier===1?1800:3000);}
     g.auras=g.auras?.filter(a=>a.until>g.tick);g.slowFields=g.slowFields?.filter(a=>a.until>g.tick);
   }
-  const API={UNIT,ITEMS,RESEARCH,tierOf,workerLimit,population,reservedPop,maxHp,unitSpeed,upgradeReason,startUpgrade,productionReason,startResearch,inventoryCapacity,shopBuy,transferItem,useItem,summonHero,reviveHero,attackCommand,damage,ability,pickupLoot,interactMove,startRepair,updateVision,visibleTo,RULES,WIDTH,HEIGHT,TEAMS,BUILDINGS,createGame,purchase,command,step,pathfind,assignGather,placement,beginBuild,resumeBuild,cancelBuild,supplyCap,cellIndex,cellPoint,footprint};
+  const API={unitRadius,diskClear,clearanceMask,staticSegment,unitPath,motionClear,formationTargets,UNIT,ITEMS,RESEARCH,tierOf,workerLimit,population,reservedPop,maxHp,unitSpeed,upgradeReason,startUpgrade,productionReason,startResearch,inventoryCapacity,shopBuy,transferItem,useItem,summonHero,reviveHero,attackCommand,damage,ability,pickupLoot,interactMove,startRepair,updateVision,visibleTo,RULES,WIDTH,HEIGHT,TEAMS,BUILDINGS,createGame,purchase,command,step,pathfind,assignGather,placement,beginBuild,resumeBuild,cancelBuild,supplyCap,cellIndex,cellPoint,footprint};
   if(typeof module!=='undefined'&&module.exports)module.exports=API;
   if(typeof document==='undefined')return;
 
   const $=id=>document.getElementById(id),canvas=$('battlefield'),mini=$('minimap'),mctx=mini.getContext('2d');
   let ctx=canvas.getContext('2d'),game=createGame(),selected=['base0'],started=false,camera={x:WIDTH/2,y:HEIGHT/2,scale:1},view={width:1,height:1};
-  let targetMode=null,interactionTarget=null;
+  let targetMode=null,interactionTarget=null,debugNavigation=false;
   let pointer=null,mouse={x:0,y:0},orderMarker=null,noticeTimer,lastTime=0,accumulator=0,buildMode=null,preview=null,previewKey='',terrainCache=null;
   const bindings=new Map();let draftKey=null,cameraHistory=[],lastIdle=null;
   const keys=new Set(),modes={idle:'Nezaposlen',move:'Kretanje',toNode:'Ide po CODE',waiting:'Čeka nalazište',harvest:'Skuplja CODE',return:'Nosi CODE',toBuild:'Ide do gradilišta',build:'Gradi',blocked:'Čeka slobodan prolaz'};
@@ -391,7 +446,7 @@
       if(object&&['shop','shrine','loot'].includes(object.type)){interactionTarget=object;interactMove(game,game.active,selected,object);updateInteraction();return;}
       if(object&&object.owner!==undefined&&object.owner!==game.active&&visibleTo(game,game.active,object)&&object.type!=='node'){command(game,game.active,selected,'attack',object);return;}
       if(object&&BUILDINGS[object.type]&&!object.completed){const u=units.find(u=>u.type==='worker');if(!u||!resumeBuild(game,game.active,u.id,object.id))notify('Izaberi svog slobodnog radnika za nastavak gradnje.');else notify('Radnik nastavlja gradnju.');return;}
-      units.forEach((u,i)=>{if(object&&object.type==='node'&&u.type==='worker')command(game,game.active,[u.id],'gather',object);else command(game,game.active,[u.id],'move',{x:p.x+(units.length>1?(i%3-1)*20:0),y:p.y+(units.length>1?Math.floor(i/3)*20:0)});});
+      const gatherers=object?.type==='node'?units.filter(u=>u.type==='worker'):[],movers=units.filter(u=>!gatherers.includes(u));if(gatherers.length)command(game,game.active,gatherers.map(u=>u.id),'gather',object);if(movers.length)command(game,game.active,movers.map(u=>u.id),'move',p);
       if(units.length)orderMarker={...p,until:performance.now()+900};else notify('Izaberi svoju jedinicu za kretanje.');return;}
     if(e.button===0){pointer={start:mouse,end:mouse,shift:e.shiftKey};canvas.setPointerCapture(e.pointerId);}
   });
@@ -402,7 +457,7 @@
   canvas.addEventListener('pointercancel',()=>{pointer=null;});
   canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.12:1/1.12,pos(e));previewKey='';},{passive:false});
   mini.addEventListener('pointerdown',e=>{const r=mini.getBoundingClientRect();jumpCamera({x:(e.clientX-r.left)/r.width*WIDTH,y:(e.clientY-r.top)/r.height*HEIGHT});canvas.focus();});
-  $('home').onclick=home;$('fit').onclick=fit;$('zoom-in').onclick=()=>zoom(1.3);$('zoom-out').onclick=()=>zoom(1/1.3);
+  $('nav-debug').onclick=()=>{debugNavigation=!debugNavigation;$('nav-debug').setAttribute('aria-pressed',String(debugNavigation));};$('home').onclick=home;$('fit').onclick=fit;$('zoom-in').onclick=()=>zoom(1.3);$('zoom-out').onclick=()=>zoom(1/1.3);
   function reset(){targetMode=null;interactionTarget=null;$('interaction-panel').hidden=true;endPlacement();bindings.clear();cameraHistory=[];lastIdle=null;game=createGame(Number($('player').value));selected=['base'+game.active];started=false;terrainCache=null;$('welcome').hidden=false;$('pause').disabled=true;$('pause').textContent='Pauza';keys.clear();accumulator=0;orderMarker=null;fit();updateHUD();}
   $('restart').onclick=reset;$('player').onchange=reset;
   $('start').onclick=()=>{game.running=true;started=true;$('welcome').hidden=true;$('pause').disabled=false;home();canvas.focus();notify('Izaberi radnika, pa B za Kasarnu ili R za Relej. Cela mapa je dostupna za test.');updateHUD();};
@@ -460,12 +515,13 @@
     const seconds=Math.floor(game.tick/20);text('clock',String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0'));
     text('income','+'+p.deliveries.reduce((s,d)=>s+d.amount,0)+(seconds<60?' / '+seconds+' s':' / min'));text('player-label','P'+(game.active+1)+' / '+TEAMS[game.active].name);text('selected-count',selected.length+' OBJEKATA');
     const b=game.buildings.find(b=>selected.includes(b.id)),n=game.nodes.find(n=>selected.includes(n.id));let title='Ništa nije izabrano',desc='Klikni objekat ili prevuci preko svojih jedinica.',meta='B / R / C: gradnja izabranim radnikom.',portrait='◇',ratio=0;
-    if(b){title=BUILDINGS[b.type].name;desc=!b.completed?(b.builderId?'Gradilište · radnik putuje ili gradi':'Gradilište miruje · desni klik radnikom'):b.type==='base'?'Tier 1 · proizvodnja i isporuka CODE-a':b.type==='relay'?'Završen Relej · +5 kapaciteta, T1 najviše 20':'Završena Kasarna · vojska u sledećoj verziji';
+    if(b){title=BUILDINGS[b.type].name;desc=!b.completed?(b.builderId?'Gradilište · radnik putuje ili gradi':'Gradilište miruje · desni klik radnikom'):b.type==='base'?'Tier '+tierOf(game,b.owner)+' · proizvodnja i isporuka CODE-a':b.type==='relay'?'Završen Relej · +5 kapaciteta, T1 najviše 20':'Završena proizvodna / tehnološka zgrada';
       meta=b.hp+' / '+BUILDINGS[b.type].hp+' HP'+(!b.completed?' · '+Math.floor(b.progress/b.duration*100)+'% · '+Math.ceil((b.duration-b.progress)/20)+' s rada':'');portrait=b.type==='base'?'⌂':b.type==='relay'?'◆':'⚑';ratio=b.hp/BUILDINGS[b.type].hp;}
     else if(units.length){const u=units[0];title=units.length>1?units.length+' jedinica':u.type==='worker'?'WHR Radnik':'Scout';desc=units.length>1?'Desni klik za grupno kretanje.':modes[u.mode];meta=u.hp+' HP · '+(u.type==='worker'?u.cargo+'/5 CODE · graditelj':'Izviđač · bez napada');portrait=u.type==='worker'?'⚒':'➤';ratio=1;}
     else if(n){title='CODE · '+(n.field==='home'?'početno polje':'proširenje');desc='Jedno aktivno mesto za skupljanje.';meta=n.remaining+' / 1.000 CODE · teret 5 · rad 3 s';portrait='◆';}
     if(b){title=b.type==='base'&&b.techLevel===2?'WHR Komandni centar':BUILDINGS[b.type].name;meta=meta.replace(BUILDINGS[b.type].hp+' HP',maxHp(game,b)+' HP');ratio=b.hp/maxHp(game,b);if(b.type==='relay')desc='Kapacitet +5 · maksimum T'+tierOf(game,b.owner)+' '+(tierOf(game,b.owner)===2?40:20);}
     if(units.length){const u=units[0];if(UNIT[u.type])title=units.length>1?units.length+' jedinica':UNIT[u.type].name;if(u.type!=='worker'&&u.type!=='scout'){desc=UNIT[u.type]?.hero?'Nivo '+u.level+' · XP '+Math.floor(u.xp):u.type==='medic'?'Lečenje 8 HP/s':'Borbena jedinica';meta=Math.ceil(u.hp)+' / '+maxHp(game,u)+' HP · '+UNIT[u.type].pop+' pop';ratio=u.hp/maxHp(game,u);}}
+    if(units.length===1&&units[0].path.length&&units[0].trafficWait>=20)desc='Čeka slobodan prolaz · nalog sačuvan';
     text('selection-name',title);text('selection-description',desc);text('selection-meta',meta);text('portrait',portrait);$('health').hidden=!ratio;$('health').firstElementChild.style.width=(ratio*100)+'%';
     const can=started&&!game.paused,base=!!b&&b.type==='base'&&b.owner===game.active&&b.completed,worker=units.some(u=>u.owner===game.active&&u.type==='worker');
     $('train-worker').disabled=!can||!base;$('train-scout').disabled=!can||!base;$('gather').disabled=!can||!worker;$('stop').disabled=!can||!units.some(u=>u.owner===game.active);
@@ -584,6 +640,7 @@
     if(buildMode){for(const z of game.map.zones.filter(z=>z.owner===game.active)){ctx.fillStyle='#75d8a514';ctx.fillRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);ctx.setLineDash([8,8]);ctx.strokeStyle='#8bddb6';ctx.lineWidth=2;ctx.strokeRect(z.x-z.w/2,z.y-z.h/2,z.w,z.h);ctx.setLineDash([]);}}
     game.nodes.filter(n=>game.players[game.active].explored[cellIndex(n.x,n.y)]).forEach(n=>{if(selected.includes(n.id))circle(n.x,n.y,21,null,'#baffb4',2);crystal(n.x,n.y,13,!n.remaining);crystal(n.x+9,n.y+5,8,!n.remaining);});game.buildings.filter(b=>visibleTo(game,game.active,b)).forEach(drawBuilding);
     for(const u of game.units.filter(u=>visibleTo(game,game.active,u))){const color=TEAMS[u.owner].color;if(selected.includes(u.id)){circle(u.x,u.y+5,17,null,'#b9ffa6',2);if(u.path.length)line([[u.x,u.y],...u.path.map(p=>[p.x,p.y])],'#a2dc9b66',1);}
+      if(debugNavigation)circle(u.x,u.y,unitRadius(u),null,u.trafficWait>=20?'#ffae71':'#d4f6b9',1/camera.scale);
       circle(u.x,u.y+7,11,'#0c1e1f88');if(u.type==='scout'){ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(u.x,u.y-18);ctx.lineTo(u.x+12,u.y+13);ctx.lineTo(u.x-12,u.y+13);ctx.closePath();ctx.fill();bunny(u.x,u.y-3,8,'#e5ebdb');}
       else{circle(u.x,u.y+3,9,u.type==='worker'?'#c79753':UNIT[u.type]?.hero?'#9a71c9':'#6588a0',color,2);bunny(u.x,u.y-6,8,'#ede8cf');if(u.cargo)crystal(u.x+9,u.y,6);}
       if(u.type!=='worker'&&u.type!=='scout'){if(selected.includes(u.id)||distance(world(mouse.x,mouse.y),u)<18)label(UNIT[u.type].name,u.x,u.y-30,color,10);ctx.fillStyle='#102321';ctx.fillRect(u.x-16,u.y+20,32,3);ctx.fillStyle='#94cf91';ctx.fillRect(u.x-16,u.y+20,32*u.hp/maxHp(game,u),3);}
@@ -599,5 +656,5 @@
   function frame(time){const elapsed=lastTime?Math.max(0,time-lastTime):0;lastTime=time;if(!document.hidden&&started&&!game.paused&&!dialog.open){accumulator+=Math.min(elapsed,1000);let count=0;while(accumulator>=50&&count++<20){step(game);accumulator-=50;}}else accumulator=0;
     const movement=dialog.open?0:Math.min(elapsed,100)*.6/camera.scale;if(keys.has('ArrowLeft'))camera.x-=movement;if(keys.has('ArrowRight'))camera.x+=movement;if(keys.has('ArrowUp'))camera.y-=movement;if(keys.has('ArrowDown'))camera.y+=movement;camera.x=clamp(camera.x,0,WIDTH);camera.y=clamp(camera.y,0,HEIGHT);if(buildMode)updatePreview();render(time);updateHUD();requestAnimationFrame(frame);}
   document.addEventListener('visibilitychange',()=>{lastTime=0;accumulator=0;keys.clear();if(document.hidden&&started&&!game.paused)pause();});window.addEventListener('resize',resize);resize();updateHUD();requestAnimationFrame(frame);
-  root.WHR=Object.freeze({snapshot:()=>JSON.parse(JSON.stringify({tick:game.tick,active:game.active,running:game.running,paused:game.paused,players:game.players.map(({visible,explored,...p})=>({...p,visibleCells:visible.reduce((a,b)=>a+b,0),exploredCells:explored.reduce((a,b)=>a+b,0)})),units:game.units,nodes:game.nodes,buildings:game.buildings,selected,camera,view,bindings:[...bindings].map(([key,target])=>({key,...target})),cameraHistoryDepth:cameraHistory.length,buildMode,preview:preview?{x:preview.x,y:preview.y,w:preview.w,h:preview.h,error:preview.error}:null,neutrals:game.neutrals,loot:game.loot,camps:game.map.camps,shops:game.map.shops,shrine:game.shrine,events:game.events,world:{width:WIDTH,height:HEIGHT},zones:game.map.zones}))});
+  root.WHR=Object.freeze({snapshot:()=>JSON.parse(JSON.stringify({tick:game.tick,active:game.active,running:game.running,paused:game.paused,players:game.players.map(({visible,explored,...p})=>({...p,visibleCells:visible.reduce((a,b)=>a+b,0),exploredCells:explored.reduce((a,b)=>a+b,0)})),units:game.units,nodes:game.nodes,buildings:game.buildings,selected,camera,view,debugNavigation,bindings:[...bindings].map(([key,target])=>({key,...target})),cameraHistoryDepth:cameraHistory.length,buildMode,preview:preview?{x:preview.x,y:preview.y,w:preview.w,h:preview.h,error:preview.error}:null,neutrals:game.neutrals,loot:game.loot,camps:game.map.camps,shops:game.map.shops,shrine:game.shrine,events:game.events,world:{width:WIDTH,height:HEIGHT},zones:game.map.zones}))});
 })(typeof window!=='undefined'?window:globalThis);
