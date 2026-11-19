@@ -10,11 +10,11 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#" aria-label="WHR CODE FRONTIER početak"><span class="rabbit">🐇</span><span>WHR <b>CODE FRONTIER</b><small>HUD I HOTKEYS / PROTOTIP 0.3</small></span></a>
+    <a class="brand" href="#" aria-label="WHR CODE FRONTIER početak"><span class="rabbit">🐇</span><span>WHR <b>CODE FRONTIER</b><small>HUD I HOTKEYS / PROTOTIP 0.4</small></span></a>
     <div class="resource"><span class="crystal">◆</span><span><small>CODE</small><strong id="code">100</strong></span><span class="income" id="income">+0 / min</span></div>
     <div class="top-stat" title="Radnici: prisutni / T1 limit"><small>Radnici</small><strong id="workers">3 / 5</strong></div>
     <div class="top-stat" title="Populacija: zauzeta / kapacitet"><small>Pop</small><strong id="supply">3 / 10</strong></div>
-    <div class="clock" title="Proteklo vreme partije"><strong id="clock">00:00</strong></div>
+    <div class="top-stat"><strong id="tier-label">T1</strong></div><div class="clock" title="Proteklo vreme partije"><strong id="clock">00:00</strong></div>
     <button id="pause" class="quiet" disabled>Pauza</button>
     <button id="restart" class="quiet" title="Vrati se na početni izbor i resetuj poligon">Reset</button>
   </header>
@@ -23,28 +23,31 @@
     <canvas id="battlefield" tabindex="0" aria-label="WHR mapa. Levi klik bira jedinicu ili bazu, desni klik šalje na cilj. Tastatura: W radnik, S Scout, G skupljanje, H zaustavljanje, Space pauza."></canvas>
     <div class="map-label"><span class="live-dot"></span>CODE FRONTIER <span>/ ČETIRI DŽUNGLE</span></div>
     <div class="view-controls"><button id="home" title="Vrati kameru kod svoje baze">Baza</button><button id="camera-back" title="Prethodni položaj kamere">↶</button><button id="hotkeys-open" title="Mapiraj taster na jedinicu, zgradu ili lokaciju">Hotkeys</button><button id="zoom-out" title="Udalji">−</button><button id="fit" title="Prikaži celu mapu">Cela mapa</button><button id="zoom-in" title="Približi">+</button></div>
-    <div class="mode-label">LOKALNI POLIGON <span>ekonomija · gradnja · proširenja</span></div>
+    <div class="mode-label">LOKALNI POLIGON <span>T1/T2 · lokalna simulacija</span></div>
     <button id="idle-worker" class="idle-worker" hidden title="Izaberi i pronađi sledećeg neaktivnog radnika"></button><div id="build-status" class="build-status" role="status" hidden></div>
     <div id="notice" role="status" aria-live="polite"></div>
 
     <section id="welcome" class="welcome">
       <div class="eyebrow">WHR / PRVI IGRIVI KORAK</div>
       <h1>WHR <em>CODE FRONTIER</em></h1>
-      <p>Prototip 0.3 · ekonomija, gradnja, HUD i hotkeys kamere.</p>
+      <p>Prototip 0.4 · T1/T2, vojska, heroji, predmeti i džungla.</p>
       <label for="player">Izaberi početnu bazu</label>
       <select id="player"><option value="0">P1 · Cyan / severozapad</option><option value="1">P2 · Violet / severoistok</option><option value="2">P3 · Amber / jugozapad</option><option value="3">P4 · Coral / jugoistok</option></select>
       <button id="start" class="primary">Pokreni poligon <span>→</span></button>
-      <p class="disclaimer">Izaberi radnika, pa građevinu i lokaciju na mapi. Desni klik na nezavršenu građevinu nastavlja rad. Bez borbe i mrežne partije; kampovi i prodavnice su planirani sadržaj. Mapa je potpuno otkrivena za testiranje.</p>
+      <p class="disclaimer">Izaberi radnika, pa građevinu i lokaciju na mapi. Desni klik na nezavršenu građevinu nastavlja rad. Lokalni T1/T2 poligon sa borbom i maglom rata. Ostali igrači zasad nemaju strateške botove. Desni klik na NPC napada; Scout posećuje prodavnice i centralno Svetilište. Bez mrežnih mečeva.</p>
     </section>
   </main>
 
   <footer class="command-deck">
     <section class="minimap-wrap"><div class="section-label">MAPA <span id="player-label">P1 / CYAN</span></div><canvas id="minimap" width="200" height="200" aria-label="Minimapa; klik pomera kameru"></canvas></section>
-    <section class="selection-panel"><div class="section-label">SELEKCIJA <span id="selected-count">1 OBJEKAT</span></div><div class="selected-details"><div id="portrait" class="portrait">⌂</div><div><h2 id="selection-name">WHR Centrala</h2><p id="selection-description">Tier 1 · proizvodnja i isporuka CODE-a</p><div id="health" class="health"><span></span></div><p id="selection-meta" class="meta">1.500 HP · bez napada</p></div></div><div id="queue" class="queue"></div></section>
-    <section class="actions-panel"><div class="section-label">KOMANDNI STO <span>TIER 1</span></div><div class="actions"><button id="train-worker" disabled><kbd>W</kbd><b>Radnik</b><span>50 ◆ · 15 s</span></button><button id="train-scout" disabled><kbd>S</kbd><b>Scout</b><span>75 ◆ · 20 s</span></button><button id="gather" disabled><kbd>G</kbd><b>Skupljaj</b><span>Najbliži CODE</span></button><button id="stop" disabled><kbd>H</kbd><b>Zaustavi</b><span>Pauziraj rad</span></button><button id="build-barracks" disabled><kbd>B</kbd><b>Kasarna</b><span>120 ◆ · 35 s</span></button><button id="build-relay" disabled><kbd>R</kbd><b>Relej</b><span>60 ◆ · 20 s</span></button><button id="build-base" disabled><kbd>C</kbd><b>Centrala</b><span>300 ◆ · 60 s</span></button><button id="cancel-build" disabled><kbd>X</kbd><b>Otkaži gradnju</b><span>Povraćaj 100 / 75%</span></button></div><p id="action-hint">Izaberi Centralu za proizvodnju ili radnika za gradnju.</p></section>
+    <section class="selection-panel"><div class="section-label">SELEKCIJA <span id="selected-count">1 OBJEKAT</span></div><div class="selected-details"><div id="portrait" class="portrait">⌂</div><div><h2 id="selection-name">WHR Centrala</h2><p id="selection-description">Tier 1 · proizvodnja i isporuka CODE-a</p><div id="health" class="health"><span></span></div><p id="selection-meta" class="meta">1.500 HP · bez napada</p></div></div><div id="queue" class="queue"></div><p id="tech-status" class="meta"></p><div id="inventory" class="inventory"></div></section>
+    <section class="actions-panel"><div class="section-label">KOMANDNI STO <span>T1/T2</span></div><div class="actions"><button id="train-worker" disabled><kbd>W</kbd><b>Radnik</b><span>50 ◆ · 15 s</span></button><button id="train-scout" disabled><kbd>S</kbd><b>Scout</b><span>75 ◆ · 20 s</span></button><button id="gather" disabled><kbd>G</kbd><b>Skupljaj</b><span>Najbliži CODE</span></button><button id="stop" disabled><kbd>H</kbd><b>Zaustavi</b><span>Pauziraj rad</span></button><button id="build-barracks" disabled><kbd>B</kbd><b>Kasarna</b><span>120 ◆ · 35 s</span></button><button id="build-relay" disabled><kbd>R</kbd><b>Relej</b><span>60 ◆ · 20 s</span></button><button id="build-base" disabled><kbd>C</kbd><b>Centrala</b><span>300 ◆ · 60 s</span></button><button id="cancel-build" disabled><kbd>X</kbd><b>Otkaži gradnju</b><span>Povraćaj 100 / 75%</span></button><button id="upgrade-tier" disabled><kbd>U</kbd><b>Tier 2</b><span>300 ◆ · 60 s</span></button>
+<button id="attack" disabled><kbd>A</kbd><b>Napad</b><span>Izaberi metu</span></button><button id="repair" disabled><kbd>L</kbd><b>Popravka</b><span>10 HP / 1 ◆ / s</span></button>
+<button id="ability-0" disabled><kbd>D</kbd><b>Moć 1</b><span>Heroj</span></button><button id="ability-1" disabled><kbd>F</kbd><b>Moć 2</b><span>T2 heroj</span></button><button id="revive" disabled><b>Oživi</b><span>100 ◆ · 45 s</span></button><button id="build-tower" disabled><b>Kula</b><span>100 ◆ · 30 s</span></button><button id="build-academy" disabled><b>Akademija</b><span>180 ◆ · 45 s</span></button><button id="build-support" disabled><b>Podrška</b><span>150 ◆ · 40 s</span></button><button id="build-workshop" disabled><b>Radionica</b><span>220 ◆ · 50 s</span></button><button id="build-altar" disabled><b>Oltar</b><span>150 ◆ · 35 s</span></button><button id="train-guard" disabled><b>Čuvar</b><span>60 ◆ · 18 s</span></button><button id="train-archer" disabled><b>Strelac</b><span>90 ◆ · 22 s</span></button><button id="train-medic" disabled><b>Bolničar</b><span>110 ◆ · 25 s</span></button><button id="train-breaker" disabled><b>Razbijač</b><span>160 ◆ · 35 s</span></button><button id="research-tools" disabled><b>Alati</b><span>120 ◆ · 40 s</span></button><button id="research-guards" disabled><b>Čuvari +HP</b><span>100 ◆ · 30 s</span></button><button id="research-optics" disabled><b>Optika</b><span>100 ◆ · 30 s</span></button></div><p id="action-hint">Izaberi Centralu za proizvodnju ili radnika za gradnju.</p></section>
   </footer>
   <details class="helpbar"><summary aria-label="Pomoć i prečice">?</summary><span><b>LEVI KLIK</b> selekcija · prevuci za grupu</span><span><b>DESNI KLIK</b> kretanje / CODE / nastavak gradnje</span><span><b>TOČKIĆ</b> zoom · <b>STRELICE</b> kamera</span><span><b>SPACE</b> pauza · <b>ESC</b> odustani</span><span><b>W/S</b> radnik/Scout · <b>B/R/C</b> gradnja</span><span>Hotkeys: dodeli taster → jedan pritisak skače na cilj</span><span><a href="docs/README.md">Pravila i razvoj</a></span></details>
 
+  <aside id="interaction-panel" hidden aria-label="Prodavnica ili Svetilište"><button id="interaction-close" aria-label="Zatvori interakciju">✕</button><h2 id="interaction-title"></h2><p id="interaction-status"></p><div id="interaction-actions"></div></aside>
   <dialog id="hotkeys-dialog" aria-labelledby="hotkeys-title">
     <form id="hotkeys-form">
       <div class="dialog-title"><h2 id="hotkeys-title">Hotkeys kamere</h2><button type="button" id="hotkeys-close" aria-label="Zatvori hotkeys">✕</button></div>

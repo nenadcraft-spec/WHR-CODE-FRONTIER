@@ -1,40 +1,44 @@
 # WHR CODE FRONTIER
 
-Originalni RTS u razvoju: OI/AI klase, CODE ekonomija, četiri džungle i planirani 1v1/2v2 režimi za ljude i botove.
+WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.4 — T1/T2 kandidat za testiranje**.
 
-## Prototip 0.3 — HUD i hotkeys
+Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, naloga niti API ključa. Stabilni 0.3 ostaje zasebna verzija.
 
-Otvorite `index.html` direktno u desktop pregledaču. Bez instalacije, CDN-a i API ključeva.
+- Mapa 160 × 160 logičkih ćelija, 16 render jedinica po ćeliji; simulacija 20 Hz, nezavisna od kamere.
+- Kompaktan HUD i podesivi hotkeys: jedinice, zgrade, grupe i lokacije; jedan pritisak skače na cilj.
+- CODE ekonomija, radnici, gradnja, proširenja, populacija i globalni T2 upgrade.
+- Čuvar, Strelac, Bolničar, Razbijač; Akademija, podrška, radionica, Oltar i kule; tri globalna istraživanja.
+- Scoutove posete prodavnicama i Svetilištu; predmeti, predaja inventara, jedan heroj sa sposobnostima i oživljavanjem.
+- Aktivni T1/T2 NPC kampovi, doprinos u borbi, CODE/XP/loot i respawn; trenutna vidljivost i istražena mapa.
 
-- Kompaktan HUD, bojište preko viewport-a i kontekstualne komande.
-- Podesivi hotkeys za jedinice, zgrade, grupe i lokacije: jedan pritisak skače na cilj. Panel **Hotkeys** vodi kroz dodelu i zamenu; nova partija briše dodele.
-- Dugme **↶** vraća prethodni kadar, a **Neaktivni** nalazi slobodnog radnika.
-- Kvadratna mapa 160 × 160 mapnih jedinica, prostrane baze, dva izlaza po bazi i četiri CODE proširenja.
-- Početna kamera kod sopstvene baze; dugme **Baza**, minimapa, zoom i pregled **Cela mapa**.
-- Tri radnika automatski skupljaju i isporučuju CODE. Proizvodnja do pet T1 radnika i jednog Scouta.
-- Radnik gradi **Kasarnu, CODE Relej i novu Centralu**. Preview lokacije, stvarni blokirajući otisak, put do gradilišta i vreme rada.
-- Zaustavi radnika, nastavi desnim klikom na gradilište ili otkaži gradnju uz dokumentovan povraćaj CODE-a.
-- Relej dodaje kapacitet tek kad se završi; nova Centrala prima isporuke i proizvodi, ali ne zaobilazi globalni limit radnika.
+## Igranje
 
-**Nema još borbe, vojnika iz Kasarne, aktivnih kampova/prodavnica, magle rata ili multiplayer servera.** Scout zasad služi kretanju. Ostale tri baze samo pokreću radničku ekonomiju za poređenje. Grafika je proceduralna skica.
+Levi klik bira, prevlačenje bira grupu. Desni klik zadaje pokret/rudarenje/nastavak gradnje ili napad na vidljivog protivnika. Izaberite radnika za gradnju; završenu Centralu za obuku i **U — T2**; vojnu zgradu za njene jedinice. T2 traži završenu Kasarnu i Relej, 300 CODE i 60 s. Sve cene, uslovi i dostupne komande prikazani su uz izabrani objekat.
 
-## Kontrole
+**A** bira metu napada, **L** metu popravke, **D/F** herojske sposobnosti; Escape/desni klik otkazuje izbor mete. **W/S** radnik/Scout, **B/R/C** Kasarna/Relej/Centrala, **G/H** skupljanje/stop, **X** otkazivanje gradilišta. Ostale komande imaju dugmad; nisu svim komandama unapred dodeljeni tasteri. Panel **Hotkeys** mapira bilo koji podržani taster na trenutnu selekciju ili lokaciju; eksplicitna zamena rešava sukob sa podrazumevanom komandom. Nova partija briše dodele.
 
-Levi klik bira; prevlačenje bira grupu; desni klik zadaje pokret, rudarenje ili nastavak gradnje. Izaberite radnika pa **B** (Kasarna), **R** (Relej), **C** (Centrala). Levi klik potvrđuje mesto, Escape/desni klik odustaje od preview-a. **H** zaustavlja radnika. **X** ili dugme otkazuje izabrano gradilište. **W/S** proizvode radnika/Scouta iz izabrane Centrale. **G** vraća radnika na CODE; Space pauzira, strelјice pomeraju kameru. Dodeljeni hotkey ima prednost nad podrazumevanom komandom tek posle eksplicitne potvrde zamene u editoru.
+Izaberite Scouta i desnim klikom na vidljivu prodavnicu/Svetilište zadajte prilazak. Panel traži rastojanje do 2 mapne jedinice za kupovinu/prizivanje. Predmeti se koriste dugmetom; **→** zatim klik na sopstvenu obližnju jedinicu predaje predmet. Prvo pozivanje heroja radi na T1; druga sposobnost i Oltar zahtevaju T2.
+
+## Granice kandidata
+
+Ovo je lokalni testni poligon sa četiri početne ekonomije. Ostali igrači nemaju strateške botove. Nema online servera, lobby-ja, timske zajedničke vizije, T3 vojske, snimanja/replay-a ni integrisanog Color Engine-a. Magla koristi kružni vidokrug bez blokiranja linije vida šumom. Navigacija je A* po ćeliji; radijus velikih jedinica i lokalno izbegavanje/preklapanje vojske zahtevaju poseban nastavak. Dijagnostički `WHR.snapshot()` vidi lokalno stanje i nije mrežna zaštita od varanja. Grafika je proceduralna razvojna skica. Novi balans i razrešena otvorena pravila su kandidati za OI proveru.
 
 ## Dokumentacija i provere
 
-- [Prototip 0.3: HUD, prečice i granice](docs/PROTOTYPE_0_3.md)
-- [Prototip 0.2: pravila i granice](docs/PROTOTYPE_0_2.md)
-- [MASTER dokumenti](docs/README.md)
-- [Istorijski zapis prototipa 0.1](PROTOTYPE.md)
+- [v0.4 MASTER i odluke](docs/WHR_RTS_V04_T1_T2_IMPLEMENTACIJA_MASTER_v1_0_2026-11-19.md)
+- [v0.4 kontrole, uslovi i provere](docs/PROTOTYPE_0_4.md)
+- [Izvorni MASTER dokumenti](docs/README.md)
+- [Istorijski v0.3 HUD](docs/PROTOTYPE_0_3.md)
 
 ```sh
 node --check script.js
 node tests/economy.cjs
 node tests/construction.cjs
+node tests/tier2.cjs
+# Browser provere zahtevaju Playwright i Chromium:
+node tests/browser.cjs
+node tests/hud.cjs
+node tests/tier2-browser.cjs
 ```
 
-Browser provere: `node tests/browser.cjs` i `node tests/hud.cjs`, uz Playwright i Chromium (`WHR_CHROMIUM_PATH` za izvršni fajl). Snimci idu u privremeni folder ili `WHR_TEST_OUTPUT`.
-
-GitHub Pages može služiti klijent sa objavljene grane; ne zamenjuje budući multiplayer server. Prvo proveravamo geometriju i ekonomiju, zatim širimo borbu i sadržaj.
+Za Chromium na drugoj putanji podesite `WHR_CHROMIUM_PATH`. Browser provere izvršavaju lokalne fajlove preko presretnutih zahteva, bez servera i pristupa internetu. `tier2-browser` dodaje CODE samo u izolovanoj testnoj kopiji, radi pokrivanja celog sadržaja; to nije dokaz normalne brzine ekonomskog razvoja.
