@@ -1,10 +1,10 @@
 # WHR CODE FRONTIER — pravila i razvoj
 
-[Prototip 0.2: mapa, gradnja i granice](PROTOTYPE_0_2.md) · [Pokreni klijent](../index.html)
+[Prototip 0.3: HUD i hotkeys](PROTOTYPE_0_3.md) · [Mapa/gradnja 0.2](PROTOTYPE_0_2.md) · [Pokreni klijent](../index.html)
 
 ## MASTER dokumenti
 
-- [HUD, UI, hotkeys i testiranje](WHR_GAME_ENGINE_HUD_UI_MASTER_v1_0_2026-11-19.md) · [Skica HUD-a A](WHR_GAME_ENGINE_HUD_WIREFRAME_A_v1_0.svg) — istraživanje i kandidat, ljudski test PENDING.
+- [HUD, UI, hotkeys i testiranje](WHR_GAME_ENGINE_HUD_UI_MASTER_v1_0_2026-11-19.md) · [Skica HUD-a A](WHR_GAME_ENGINE_HUD_WIREFRAME_A_v1_0.svg) — istraživanje i kandidat; implementacija osnovnog HUD-a i kamera prečica u 0.3, ljudski test PENDING.
 
 - [Mapa i pravila](WHR_RTS_MAPA_PRAVILA_MASTER_v1_0_2026-11-18.md)
 - [Ekonomija i vreme](WHR_RTS_RESURS_VREME_MASTER_v1_0_2026-11-18.md)
