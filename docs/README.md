@@ -1,5 +1,7 @@
 # WHR CODE FRONTIER — pravila i razvoj
 
+[Prototip 0.6: lokalni strateški bot](PROTOTYPE_0_6.md) · [Botovi/multiplayer MASTER](WHR_GAME_ENGINE_BOTOVI_MULTIPLAYER_MASTER_v1_0_2026-11-19.md)
+
 [Prototip 0.5: navigacija](PROTOTYPE_0_5.md) · [Navigacija/botovi/multiplayer MASTER](WHR_GAME_ENGINE_NAVIGACIJA_BOTOVI_MULTIPLAYER_MASTER_v1_0_2026-11-19.md)
 
 [Prototip 0.4: T1/T2 kandidat](PROTOTYPE_0_4.md) · [v0.4 implementacioni MASTER](WHR_RTS_V04_T1_T2_IMPLEMENTACIJA_MASTER_v1_0_2026-11-19.md)
