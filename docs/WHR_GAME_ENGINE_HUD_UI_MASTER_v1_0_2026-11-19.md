@@ -147,7 +147,7 @@ Makro: ekonomija, proizvodnja, zalihe/populacija, razvoj i raspored pažnje po m
 
 1. **Usvojena semantika direktnog skoka:** mapirana jedinica na F1 → jedan pritisak F1 odmah centrirа kameru na tu jedinicu, svaki put. Nije potreban dvostruki pritisak. WC3 dvostruki pritisak je samo referenca i ne zamenjuje ovaj zahtev. Eventualna odvojena akcija „samo izaberi grupu” mora imati posebno vezivanje.
 2. Keymap je podesiv: svaki binding čuva taster/modifikatore, vrstu akcije i stabilni entity ID ili grupu. Predlog načina dodele je izbor jedinice → podešavanje prečice → F1 → potvrda; dodatni brzi assign hotkey tek posle provere sukoba. Ctrl+1…9 za dodelu grupa je kandidat, ne jedini način mapiranja. Shift dodavanje i pravilo mešanih objekata rešiti pre implementacije.
-3. Predlog F5–F8 pamti lokacije preko Ctrl+F5–F8, a jedan F5–F8 vraća kameru. OS/browser mogu presresti ove tastere; vezivanje je kandidat, ne zaključana šema. Uvesti i dugmad/alternativno vezivanje.
+3. **Slobodno mapiranje po OI zahtevu:** lokacije, zgrade i jedinice mogu da se vežu na taster koji korisnik odabere. Podržati i proveriti prvenstveno 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 i F1, F2, F3, F4. Taster nije unapred rezervisan samo za jednu vrstu cilja: npr. 1 → Centrala, 2 → Scout, 3 → lokacija džungle, F1 → radnik. Jedan pritisak aktivira direktni skok. Raniji F5–F8 predlog nije ograničenje niti usvojena šema. Browser/OS mogu presresti pojedine tastere; podršku proveriti u ciljnom klijentu i omogućiti alternativno vezivanje.
 4. „Idi na selekciju” centriranje bez novog order-a. Za raštrkanu grupu fokus na stabilnog primarnog člana, ne na prazan geometrijski prosek; prikazati broj grupe i položaj ostalih na minimapi.
 5. „Prethodna kamera” vraća prethodni položaj/zoom; poseban mali istorijat za eksplicitne skokove, ne beležiti svaki frame pomeranja.
 6. **Jedinica nije fiksna koordinata:** binding na F1 prati entity ID, a položaj čita pri pritisku. Sačuvana lokacija čuva koordinate/zoom i druga je akcija. Skok na jedinicu sam po sebi ne menja selekciju niti aktivira stalno praćenje kamere; to su odvojene opcije. Ako cilj više ne postoji: kratko „Mapirana jedinica više nije dostupna”, bez skoka na proizvoljan objekat. Budući fog/spectator i vlasništvo ograničavaju dozvoljene mete.
@@ -159,6 +159,21 @@ Makro: ekonomija, proizvodnja, zalihe/populacija, razvoj i raspored pažnje po m
 Skok mora sačuvati selekciju osim kada akcija izričito bira objekat, sačuvati zoom za lokacione skokove prema dogovorenom pravilu, ograničiti kameru na svet i ažurirati minimap okvir. Ne sme naplatiti resurs, zaustaviti radnika ili promeniti nalog. Direktan skok je podrazumevani kandidat; eventualni kratak prelaz mora imati opciju isključivanja. Bez dugog leta kamere kroz mapu.
 
 **Input sukobi:** Space ostaje postojeća pauza do posebne odluke. R je već Relej, C Centrala, B Kasarna, S Scout. Nove prečice ne smeju preuzeti te tastere neprimetno. Fokus u input/select/text polju blokira game hotkeys. Browser Ctrl+W, Ctrl+R, Alt+Left i slične sistemske kombinacije izbegavati. Prikaz u tooltip-u mora dolaziti iz aktivnog keymap-a. F1 u browseru može otvoriti pomoć: handler treba da spreči podrazumevanu akciju kada je binding aktivan i fokus pripada igri. To proveriti u ciljanom browseru; ne obećavati da aplikacija može presresti svaki OS taster. Držanje F1 ne sme proizvoditi nekontrolisano ponavljanje. Escape briše nedovršeno mapiranje, a duplikat binding-a traži jasnu zamenu ili drugo vezivanje.
+
+### Slobodno mapiranje ciljeva — preciziranje OI
+
+| Vrsta cilja | Šta se vezuje | Jedan pritisak na izabrani hotkey |
+|---|---|---|
+| Lokacija | Koordinate na mapi; politika čuvanja zoom-a mora biti jasno prikazana | Skok na sačuvanu lokaciju |
+| Zgrada | Stabilni ID konkretne zgrade | Skok na tu zgradu |
+| Jedinica | Stabilni ID konkretne jedinice | Skok na njen trenutni položaj |
+| Grupa, kao proširenje | Lista stabilnih ID-jeva i stabilni primarni član | Skok prema dogovorenom pravilu fokusa grupe |
+
+Isti podesivi sistem prihvata ciljeve različitih vrsta. Slobodno mapiranje ne znači da ista tipka u istom aktivnom kontekstu sme neprimetno izvršiti više različitih radnji. Ako korisnik mapira B na zgradu, a B već služi za Kasarnu, editor keymap-a mora pokazati sukob i ponuditi eksplicitnu zamenu ili drugo vezivanje. Prikazati listu dodela, omogućiti promenu i uklanjanje, a nedostupne sistemske kombinacije objasniti pre potvrde. OI sam bira raspored; primeri 1–0 / F1–F4 ne zaključavaju buduće tastere.
+
+Način dodele i čuvanje podešavanja preko restarta još treba precizirati/implementirati. Lokacije i ID-jevi objekata pripadaju konkretnoj partiji; posle nove partije stare objekte ne sme povezati sa slučajno ponovo iskorišćenim ID-jem. Profil tastera i aktivne mete partije moraju se razlikovati.
+
+Dodatne provere: mapirati lokaciju na 1, zgradu na 0 i pokretnu jedinicu na F4; svaki put jedan pritisak daje odgovarajući skok. Zameniti ciljeve između istih tastera i proveriti da stara veza više ne radi. Proveriti svih deset brojeva i F1–F4, fokus polja za unos, duplikat, nedostupan cilj i novu partiju. Status: PENDING — zahtev je dokumentovan, funkcija još nije implementirana.
 
 ### Makro podrška po fazama
 
