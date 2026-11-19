@@ -1,5 +1,7 @@
 # WHR CODE FRONTIER — pravila i razvoj
 
+[Prototip 0.4: T1/T2 kandidat](PROTOTYPE_0_4.md) · [v0.4 implementacioni MASTER](WHR_RTS_V04_T1_T2_IMPLEMENTACIJA_MASTER_v1_0_2026-11-19.md)
+
 [Prototip 0.3: HUD i hotkeys](PROTOTYPE_0_3.md) · [Mapa/gradnja 0.2](PROTOTYPE_0_2.md) · [Pokreni klijent](../index.html)
 
 ## MASTER dokumenti

@@ -137,3 +137,26 @@ dialog select, #binding-key { width: 100%; padding: 10px; background: #1b3338; c
  .selection-panel { left: 6px; bottom: 144px; width: 245px; max-height: 130px; }
  .idle-worker { bottom: 116px; left: 6px; } .helpbar { top: 86px; }
 }
+
+/* v0.4: T1/T2 actions retain compact, context-dependent slots. */
+.actions { grid-template-rows: repeat(3,58px); }
+#upgrade-tier { grid-column:3;grid-row:1; }
+#attack { grid-column:1;grid-row:1; } #repair { grid-column:3;grid-row:1; }
+#ability-0 { grid-column:2;grid-row:1; } #ability-1 { grid-column:3;grid-row:1; }
+#revive { grid-column:1;grid-row:1; }
+#build-tower { grid-column:4;grid-row:1; }
+#build-academy { grid-column:1;grid-row:3; } #build-support { grid-column:2;grid-row:3; }
+#build-workshop { grid-column:3;grid-row:3; } #build-altar { grid-column:4;grid-row:3; }
+#train-guard { grid-column:1;grid-row:1; } #train-archer { grid-column:2;grid-row:1; }
+#train-medic, #train-breaker { grid-column:1;grid-row:1; }
+#research-tools { grid-column:1;grid-row:1; } #research-guards { grid-column:2;grid-row:1; } #research-optics { grid-column:3;grid-row:1; }
+.selection-panel { max-height:235px; } #tech-status { margin-top:6px; }
+.inventory { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.inventory button { padding:4px; font-size:11px; }
+#interaction-panel { position:absolute;right:10px;top:56px;z-index:8;width:min(330px,90vw);max-height:60vh;overflow:auto;padding:12px;background:#10232af5;border:1px solid #557a6a;border-radius:4px; }
+#interaction-close { float:right;padding:5px 9px; } #interaction-panel h2 { font-size:15px;margin:3px 0 8px; }
+#interaction-panel p { font-size:12px; } #interaction-actions { display:grid;gap:5px; }
+#interaction-actions button { padding:7px;text-align:left;font-size:12px; }
+@media(max-width:640px){ .actions{grid-template-rows:repeat(3,54px);} .selection-panel{bottom:188px;} .topbar .clock{display:none;} #tier-label{font-size:11px;} }
+
+#build-tower {grid-row:2;grid-column:4;} #ability-0 {grid-column:3;} #ability-1 {grid-column:4;}
