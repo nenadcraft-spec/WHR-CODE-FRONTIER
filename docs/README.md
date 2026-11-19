@@ -4,6 +4,8 @@
 
 ## MASTER dokumenti
 
+- [HUD, UI, hotkeys i testiranje](WHR_GAME_ENGINE_HUD_UI_MASTER_v1_0_2026-11-19.md) · [Skica HUD-a A](WHR_GAME_ENGINE_HUD_WIREFRAME_A_v1_0.svg) — istraživanje i kandidat, ljudski test PENDING.
+
 - [Mapa i pravila](WHR_RTS_MAPA_PRAVILA_MASTER_v1_0_2026-11-18.md)
 - [Ekonomija i vreme](WHR_RTS_RESURS_VREME_MASTER_v1_0_2026-11-18.md)
 - [Tier 1](WHR_RTS_TIER_1_MASTER_v1_0_2026-11-18.md)
