@@ -1,4 +1,4 @@
-/* WHR CODE FRONTIER · 0.2 · Map and construction sandbox. */
+/* WHR CODE FRONTIER · 0.3 · HUD and camera-hotkey sandbox. */
 (function (root) {
   'use strict';
   const RULES = Object.freeze({ hz: 20, cell: 16, cols: 160, rows: 160, workerCost: 50, scoutCost: 75,
@@ -193,11 +193,14 @@
   const $=id=>document.getElementById(id),canvas=$('battlefield'),mini=$('minimap'),mctx=mini.getContext('2d');
   let ctx=canvas.getContext('2d'),game=createGame(),selected=['base0'],started=false,camera={x:WIDTH/2,y:HEIGHT/2,scale:1},view={width:1,height:1};
   let pointer=null,mouse={x:0,y:0},orderMarker=null,noticeTimer,lastTime=0,accumulator=0,buildMode=null,preview=null,previewKey='',terrainCache=null;
+  const bindings=new Map();let draftKey=null,cameraHistory=[],lastIdle=null;
   const keys=new Set(),modes={idle:'Nezaposlen',move:'Kretanje',toNode:'Ide po CODE',waiting:'Čeka nalazište',harvest:'Skuplja CODE',return:'Nosi CODE',toBuild:'Ide do gradilišta',build:'Gradi',blocked:'Čeka slobodan prolaz'};
   function notify(text){$('notice').textContent=text;$('notice').classList.add('show');clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('notice').classList.remove('show'),3600);}
-  function fit(){camera.scale=Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80));camera.x=WIDTH/2;camera.y=HEIGHT/2;}
-  function home(){const b=game.bases[game.active];camera.scale=Math.min(1.5,view.width/900,view.height/760);camera.x=b.x+(b.x<1280?130:-130);camera.y=b.y+(b.y<1280?90:-90);}
-  function resize(){const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);view.width=r.width;view.height=r.height;canvas.width=r.width*dpr;canvas.height=r.height*dpr;if(started)home();else fit();}
+  function rememberCamera(){cameraHistory.push({...camera});if(cameraHistory.length>24)cameraHistory.shift();}
+  function jumpCamera(target){rememberCamera();camera.x=clamp(target.x,0,WIDTH);camera.y=clamp(target.y,0,HEIGHT);if(target.scale)camera.scale=clamp(target.scale,Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80)),2);pointer=null;keys.clear();previewKey='';}
+  function fit(){rememberCamera();camera.scale=Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80));camera.x=WIDTH/2;camera.y=HEIGHT/2;}
+  function home(){rememberCamera();const b=game.bases[game.active];camera.scale=Math.min(1.5,view.width/900,view.height/760);camera.x=b.x+(b.x<1280?130:-130);camera.y=b.y+(b.y<1280?90:-90);}
+  function resize(){const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);view.width=r.width;view.height=r.height;canvas.width=r.width*dpr;canvas.height=r.height*dpr;if(!started)fit();}
   function world(x,y){return{x:(x-view.width/2)/camera.scale+camera.x,y:(y-view.height/2)/camera.scale+camera.y};}
   function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
   function zoom(f,p={x:view.width/2,y:view.height/2}){const before=world(p.x,p.y);camera.scale=clamp(camera.scale*f,Math.min(view.width/(WIDTH+80),view.height/(HEIGHT+80)),2);const after=world(p.x,p.y);camera.x+=before.x-after.x;camera.y+=before.y-after.y;}
@@ -224,9 +227,9 @@
     else{const object=hit(b);ids=object?[object.id]:[];}selected=pointer.shift?[...new Set([...selected,...ids])]:ids;pointer=null;updateHUD();});
   canvas.addEventListener('pointercancel',()=>{pointer=null;});
   canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY<0?1.12:1/1.12,pos(e));previewKey='';},{passive:false});
-  mini.addEventListener('pointerdown',e=>{const r=mini.getBoundingClientRect();camera.x=(e.clientX-r.left)/r.width*WIDTH;camera.y=(e.clientY-r.top)/r.height*HEIGHT;previewKey='';});
+  mini.addEventListener('pointerdown',e=>{const r=mini.getBoundingClientRect();jumpCamera({x:(e.clientX-r.left)/r.width*WIDTH,y:(e.clientY-r.top)/r.height*HEIGHT});canvas.focus();});
   $('home').onclick=home;$('fit').onclick=fit;$('zoom-in').onclick=()=>zoom(1.3);$('zoom-out').onclick=()=>zoom(1/1.3);
-  function reset(){endPlacement();game=createGame(Number($('player').value));selected=['base'+game.active];started=false;terrainCache=null;$('welcome').hidden=false;$('pause').disabled=true;$('pause').textContent='Pauza';keys.clear();accumulator=0;orderMarker=null;fit();updateHUD();}
+  function reset(){endPlacement();bindings.clear();cameraHistory=[];lastIdle=null;game=createGame(Number($('player').value));selected=['base'+game.active];started=false;terrainCache=null;$('welcome').hidden=false;$('pause').disabled=true;$('pause').textContent='Pauza';keys.clear();accumulator=0;orderMarker=null;fit();updateHUD();}
   $('restart').onclick=reset;$('player').onchange=reset;
   $('start').onclick=()=>{game.running=true;started=true;$('welcome').hidden=true;$('pause').disabled=false;home();canvas.focus();notify('Izaberi radnika, pa B za Kasarnu ili R za Relej. Cela mapa je dostupna za test.');updateHUD();};
   function pause(){if(!started)return;game.paused=!game.paused;$('pause').textContent=game.paused?'Nastavi':'Pauza';accumulator=0;endPlacement();updateHUD();}
@@ -235,7 +238,42 @@
   $('train-worker').onclick=()=>train('worker');$('train-scout').onclick=()=>train('scout');$('gather').onclick=()=>{command(game,game.active,selected,'gather');updateHUD();};$('stop').onclick=()=>{command(game,game.active,selected,'stop');updateHUD();};
   for(const type of ['base','barracks','relay'])$('build-'+type).onclick=()=>chooseBuild(type);
   $('cancel-build').onclick=()=>{const id=selected.find(id=>game.buildings.some(b=>b.id===id&&!b.completed&&b.owner===game.active));if(id&&cancelBuild(game,game.active,id)){selected=[];notify('Gradnja otkazana. CODE vraćen prema napretku.');updateHUD();}};
-  window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(buildMode)endPlacement();else selected=[];updateHUD();return;}if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;
+  const defaults={Space:'Pauza',KeyW:'Radnik',KeyS:'Scout',KeyG:'Skupljaj',KeyH:'Zaustavi',KeyB:'Kasarna',KeyR:'Relej',KeyC:'Centrala',KeyX:'Otkaži gradnju'};
+  const dialog=$('hotkeys-dialog');
+  function keyName(code){return code.replace(/^Digit/,'').replace(/^Key/,'').replace(/^Numpad/,'Num ').replace('Space','Space');}
+  function bindingName(b){if(b.kind==='location')return 'Lokacija '+Math.round(b.x/16)+', '+Math.round(b.y/16);return b.ids.length>1?'Grupa · '+b.ids.length:b.label;}
+  function targetObjects(){return [...game.units,...game.buildings].filter(o=>selected.includes(o.id)&&o.owner===game.active);}
+  function refreshBindingEditor(){
+    const objects=targetObjects(),isLocation=$('binding-target').value==='location';
+    $('binding-target-name').textContent=isLocation?'Sačuvaće se trenutni položaj i zoom kamere.':objects.length?objects.map(o=>BUILDINGS[o.type]?.name||(o.type==='worker'?'Radnik':'Scout')).join(' + '):'Izaberi sopstvenu jedinicu ili zgradu na mapi, pa otvori Hotkeys.';
+    const conflict=draftKey&&(bindings.has(draftKey)||defaults[draftKey]);
+    $('binding-conflict').textContent=!draftKey?'':conflict?'Zauzeto: '+(bindings.has(draftKey)?bindingName(bindings.get(draftKey)):defaults[draftKey])+'. Potvrdi zamenu.':'Slobodan taster: '+keyName(draftKey);
+    $('binding-replace-row').hidden=!conflict;
+    $('binding-save').disabled=!draftKey||(!isLocation&&!objects.length)||(!!conflict&&!$('binding-replace').checked);
+    $('binding-list').replaceChildren();
+    for(const [code,b] of bindings){const li=document.createElement('li'),text=document.createElement('span'),remove=document.createElement('button');text.textContent=keyName(code)+' → '+bindingName(b);remove.type='button';remove.textContent='Ukloni';remove.setAttribute('aria-label','Ukloni '+keyName(code));remove.onclick=()=>{bindings.delete(code);$('binding-replace').checked=false;refreshBindingEditor();updateHUD();};li.append(text,remove);$('binding-list').append(li);}
+  }
+  $('hotkeys-open').onclick=()=>{if(!started)return;keys.clear();pointer=null;draftKey=null;$('binding-key').value='';$('binding-replace').checked=false;dialog.showModal();refreshBindingEditor();};
+  function closeHotkeys(){dialog.close();keys.clear();accumulator=0;lastTime=0;canvas.focus();}
+  $('hotkeys-close').onclick=closeHotkeys;
+  dialog.addEventListener('cancel',e=>{e.preventDefault();closeHotkeys();});
+  $('binding-target').onchange=refreshBindingEditor;$('binding-replace').onchange=refreshBindingEditor;
+  $('binding-key').addEventListener('keydown',e=>{if(e.code==='Tab'||e.code==='Escape')return;e.preventDefault();e.stopPropagation();
+    if(e.ctrlKey||e.metaKey||e.altKey||e.shiftKey||!(/^(Key[A-Z]|Digit[0-9]|Numpad[0-9]|F([1-9]|1[0-2])|Space|Backspace|Enter|Home|End|PageUp|PageDown|Insert|Delete|Backquote|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash)$/.test(e.code))){draftKey=null;$('binding-key').value='';$('binding-save').disabled=true;$('binding-replace-row').hidden=true;$('binding-conflict').textContent='Izaberi jedan taster bez modifikatora. Escape, Tab i strelice služe navigaciji.';return;}
+    draftKey=e.code;$('binding-key').value=keyName(draftKey);$('binding-replace').checked=false;refreshBindingEditor();});
+  $('hotkeys-form').onsubmit=e=>{e.preventDefault();if($('binding-save').disabled)return;const objects=targetObjects();const b=$('binding-target').value==='location'?{kind:'location',x:camera.x,y:camera.y,scale:camera.scale}:{kind:'entities',ids:objects.map(o=>o.id),label:objects.length===1?(BUILDINGS[objects[0].type]?.name||(objects[0].type==='worker'?'Radnik':'Scout')):'Grupa'};
+    bindings.set(draftKey,b);notify(keyName(draftKey)+' → '+bindingName(b));closeHotkeys();updateHUD();};
+  $('camera-back').onclick=()=>{const previous=cameraHistory.pop();if(previous){Object.assign(camera,previous);pointer=null;keys.clear();previewKey='';}else notify('Nema prethodnog kadra.');canvas.focus();};
+  $('idle-worker').onclick=()=>{const idle=game.units.filter(u=>u.owner===game.active&&u.type==='worker'&&u.mode==='idle');if(!idle.length)return;const i=idle.findIndex(u=>u.id===lastIdle),u=idle[(i+1)%idle.length];lastIdle=u.id;selected=[u.id];jumpCamera(u);updateHUD();canvas.focus();};
+  function activateBinding(code){const b=bindings.get(code);if(!b)return false;if(b.kind==='location')jumpCamera(b);else{const target=b.ids.map(id=>[...game.units,...game.buildings].find(o=>o.id===id&&o.owner===game.active)).find(Boolean);if(target)jumpCamera(target);else notify('Mapirani objekat više nije dostupan.');}return true;}
+  window.addEventListener('keydown',e=>{
+    if(dialog.open)return;
+    if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)||document.activeElement.isContentEditable)return;
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    if(e.code==='Escape'){e.preventDefault();if(buildMode)endPlacement();else selected=[];updateHUD();return;}
+    if(started&&bindings.has(e.code)){e.preventDefault();if(!e.repeat)activateBinding(e.code);return;}
+    if(['BUTTON','SUMMARY','A'].includes(document.activeElement.tagName))return;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;
     if(e.code==='Space')pause();if(e.code==='KeyW')train('worker');if(e.code==='KeyS')train('scout');if(e.code==='KeyG')$('gather').click();if(e.code==='KeyH')$('stop').click();
     if(e.code==='KeyB')chooseBuild('barracks');if(e.code==='KeyR')chooseBuild('relay');if(e.code==='KeyC')chooseBuild('base');if(e.code==='KeyX')$('cancel-build').click();
   });
@@ -256,6 +294,19 @@
     $('train-worker').disabled=!can||!base;$('train-scout').disabled=!can||!base;$('gather').disabled=!can||!worker;$('stop').disabled=!can||!units.some(u=>u.owner===game.active);
     for(const type of ['base','barracks','relay']){$('build-'+type).disabled=!can||!worker;$('build-'+type).classList.toggle('active',!!buildMode&&buildMode.type===type);}
     $('cancel-build').disabled=!can||!b||b.owner!==game.active||b.completed;
+    const ownUnit=units.some(u=>u.owner===game.active),site=!!b&&b.owner===game.active&&!b.completed;
+    const visible={'train-worker':base,'train-scout':base,gather:worker,stop:ownUnit,'build-barracks':worker,'build-relay':worker,'build-base':worker,'cancel-build':site};
+    for(const [id,show] of Object.entries(visible))$(id).hidden=!show;
+    document.querySelector('.actions-panel').hidden=!Object.values(visible).some(Boolean);
+    document.querySelector('.selection-panel').hidden=!started||!selected.length;
+    const idle=own.filter(u=>u.type==='worker'&&u.mode==='idle');$('idle-worker').hidden=!started||!idle.length;$('idle-worker').textContent='Neaktivni: '+idle.length;
+    const status=(id,reason)=>{$(id).disabled=!!reason;$(id).title=[$(id).textContent.trim(),reason].filter(Boolean).join(' — ');};
+    const queued=type=>pending.filter(j=>j.type===type).length,has=type=>own.filter(u=>u.type===type).length;
+    for(const type of ['worker','scout']){const cost=type==='worker'?50:75,limit=type==='worker'?5:1;status('train-'+type,!can?'Poligon je pauziran / nije pokrenut.':!base?'Izaberi svoju Centralu.':has(type)+queued(type)>=limit?'Globalni limit '+limit:own.length+pending.length>=supplyCap(game,game.active)?'Nema slobodne populacije.':p.code<cost?'Potrebno '+cost+' CODE; dostupno '+p.code+'.':'');}
+    for(const type of ['base','barracks','relay'])status('build-'+type,!can?'Poligon je pauziran / nije pokrenut.':!worker?'Izaberi radnika.':p.code<BUILDINGS[type].cost?'Potrebno '+BUILDINGS[type].cost+' CODE; dostupno '+p.code+'.':'');
+    for(const [id,code] of [['train-worker','KeyW'],['train-scout','KeyS'],['gather','KeyG'],['stop','KeyH'],['build-barracks','KeyB'],['build-relay','KeyR'],['build-base','KeyC'],['cancel-build','KeyX']])$(id).querySelector('kbd').textContent=bindings.has(code)?'':keyName(code);
+    $('pause').title=bindings.has('Space')?'Space je dodeljen kameri.':'Space: pauza / nastavak';
+    $('hotkeys-open').disabled=!started;
     const jobs=base?b.queue:[],signature=JSON.stringify(jobs.map(j=>[j.type,j.remaining]));if(signature!==queueSignature){queueSignature=signature;$('queue').replaceChildren();jobs.forEach((j,i)=>{const el=document.createElement('span');el.className='job';el.textContent=(j.type==='worker'?'Radnik':'Scout')+' · '+(i?'čeka':j.remaining?Math.ceil(j.remaining/20)+' s':'čeka izlaz');el.style.setProperty('--progress',((1-j.remaining/j.duration)*100)+'%');$('queue').append(el);});}
     text('action-hint',game.paused?'Pauza · svi radovi miruju.':buildMode?'Levi klik potvrđuje. Desni klik / Escape odustaje.':worker?'B Kasarna · R Relej · C Centrala. Desni klik na gradilište nastavlja rad.':'Izaberi Centralu za proizvodnju ili radnika za gradnju.');
   }
@@ -305,8 +356,8 @@
     if(pointer&&distance(pointer.start,pointer.end)>5){ctx.fillStyle='#81e5b922';ctx.strokeStyle='#a6efc5';ctx.lineWidth=1;ctx.fillRect(pointer.start.x,pointer.start.y,pointer.end.x-pointer.start.x,pointer.end.y-pointer.start.y);ctx.strokeRect(pointer.start.x,pointer.start.y,pointer.end.x-pointer.start.x,pointer.end.y-pointer.start.y);}
     mctx.drawImage(terrain(),0,0,mini.width,mini.height);const sx=mini.width/WIDTH,sy=mini.height/HEIGHT;for(const b of game.buildings){mctx.fillStyle=TEAMS[b.owner].color;mctx.fillRect(b.x*sx-3,b.y*sy-3,6,6);}for(const u of game.units){mctx.fillStyle=TEAMS[u.owner].color;mctx.fillRect(u.x*sx-1,u.y*sy-1,2,2);}mctx.strokeStyle='#dcf6d9';mctx.lineWidth=1;mctx.strokeRect((camera.x-view.width/camera.scale/2)*sx,(camera.y-view.height/camera.scale/2)*sy,view.width/camera.scale*sx,view.height/camera.scale*sy);
   }
-  function frame(time){const elapsed=lastTime?Math.max(0,time-lastTime):0;lastTime=time;if(!document.hidden&&started&&!game.paused){accumulator+=Math.min(elapsed,1000);let count=0;while(accumulator>=50&&count++<20){step(game);accumulator-=50;}}else accumulator=0;
-    const movement=Math.min(elapsed,100)*.6/camera.scale;if(keys.has('ArrowLeft'))camera.x-=movement;if(keys.has('ArrowRight'))camera.x+=movement;if(keys.has('ArrowUp'))camera.y-=movement;if(keys.has('ArrowDown'))camera.y+=movement;camera.x=clamp(camera.x,0,WIDTH);camera.y=clamp(camera.y,0,HEIGHT);if(buildMode)updatePreview();render(time);updateHUD();requestAnimationFrame(frame);}
+  function frame(time){const elapsed=lastTime?Math.max(0,time-lastTime):0;lastTime=time;if(!document.hidden&&started&&!game.paused&&!dialog.open){accumulator+=Math.min(elapsed,1000);let count=0;while(accumulator>=50&&count++<20){step(game);accumulator-=50;}}else accumulator=0;
+    const movement=dialog.open?0:Math.min(elapsed,100)*.6/camera.scale;if(keys.has('ArrowLeft'))camera.x-=movement;if(keys.has('ArrowRight'))camera.x+=movement;if(keys.has('ArrowUp'))camera.y-=movement;if(keys.has('ArrowDown'))camera.y+=movement;camera.x=clamp(camera.x,0,WIDTH);camera.y=clamp(camera.y,0,HEIGHT);if(buildMode)updatePreview();render(time);updateHUD();requestAnimationFrame(frame);}
   document.addEventListener('visibilitychange',()=>{lastTime=0;accumulator=0;keys.clear();if(document.hidden&&started&&!game.paused)pause();});window.addEventListener('resize',resize);resize();updateHUD();requestAnimationFrame(frame);
-  root.WHR=Object.freeze({snapshot:()=>JSON.parse(JSON.stringify({tick:game.tick,active:game.active,running:game.running,paused:game.paused,players:game.players,units:game.units,nodes:game.nodes,buildings:game.buildings,selected,camera,view,buildMode,preview:preview?{x:preview.x,y:preview.y,w:preview.w,h:preview.h,error:preview.error}:null,world:{width:WIDTH,height:HEIGHT},zones:game.map.zones}))});
+  root.WHR=Object.freeze({snapshot:()=>JSON.parse(JSON.stringify({tick:game.tick,active:game.active,running:game.running,paused:game.paused,players:game.players,units:game.units,nodes:game.nodes,buildings:game.buildings,selected,camera,view,bindings:[...bindings].map(([key,target])=>({key,...target})),cameraHistoryDepth:cameraHistory.length,buildMode,preview:preview?{x:preview.x,y:preview.y,w:preview.w,h:preview.h,error:preview.error}:null,world:{width:WIDTH,height:HEIGHT},zones:game.map.zones}))});
 })(typeof window!=='undefined'?window:globalThis);
