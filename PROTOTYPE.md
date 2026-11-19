@@ -1,6 +1,6 @@
 # WHR CODE FRONTIER — prototip 0.1 (istorijski zapis)
 
-Aktuelni opis: [Prototip 0.2 — mapa i gradnja](docs/PROTOTYPE_0_2.md). Ostatak ovog fajla opisuje prethodnu verziju, ne trenutno stanje svih funkcija.
+Aktuelni opis: [Prototip 0.3 — HUD i hotkeys](docs/PROTOTYPE_0_3.md). Ostatak ovog fajla opisuje prethodnu verziju, ne trenutno stanje svih funkcija.
 
 Otvoriti `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a ili API ključa. Tri fajla klijenta su `index.html`, `script.js` i `style.css`.
 
