@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a151c">
+  <title>WHR · CODE FRONTIER</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="WHR CODE FRONTIER početak"><span class="rabbit">🐇</span><span>WHR <b>CODE FRONTIER</b><small>HUD I HOTKEYS / PROTOTIP 0.3</small></span></a>
+    <div class="resource"><span class="crystal">◆</span><span><small>CODE</small><strong id="code">100</strong></span><span class="income" id="income">+0 / min</span></div>
+    <div class="top-stat" title="Radnici: prisutni / T1 limit"><small>Radnici</small><strong id="workers">3 / 5</strong></div>
+    <div class="top-stat" title="Populacija: zauzeta / kapacitet"><small>Pop</small><strong id="supply">3 / 10</strong></div>
+    <div class="clock" title="Proteklo vreme partije"><strong id="clock">00:00</strong></div>
+    <button id="pause" class="quiet" disabled>Pauza</button>
+    <button id="restart" class="quiet" title="Vrati se na početni izbor i resetuj poligon">Reset</button>
+  </header>
+
+  <main class="battlefield">
+    <canvas id="battlefield" tabindex="0" aria-label="WHR mapa. Levi klik bira jedinicu ili bazu, desni klik šalje na cilj. Tastatura: W radnik, S Scout, G skupljanje, H zaustavljanje, Space pauza."></canvas>
+    <div class="map-label"><span class="live-dot"></span>CODE FRONTIER <span>/ ČETIRI DŽUNGLE</span></div>
+    <div class="view-controls"><button id="home" title="Vrati kameru kod svoje baze">Baza</button><button id="camera-back" title="Prethodni položaj kamere">↶</button><button id="hotkeys-open" title="Mapiraj taster na jedinicu, zgradu ili lokaciju">Hotkeys</button><button id="zoom-out" title="Udalji">−</button><button id="fit" title="Prikaži celu mapu">Cela mapa</button><button id="zoom-in" title="Približi">+</button></div>
+    <div class="mode-label">LOKALNI POLIGON <span>ekonomija · gradnja · proširenja</span></div>
+    <button id="idle-worker" class="idle-worker" hidden title="Izaberi i pronađi sledećeg neaktivnog radnika"></button><div id="build-status" class="build-status" role="status" hidden></div>
+    <div id="notice" role="status" aria-live="polite"></div>
+
+    <section id="welcome" class="welcome">
+      <div class="eyebrow">WHR / PRVI IGRIVI KORAK</div>
+      <h1>WHR <em>CODE FRONTIER</em></h1>
+      <p>Prototip 0.3 · ekonomija, gradnja, HUD i hotkeys kamere.</p>
+      <label for="player">Izaberi početnu bazu</label>
+      <select id="player"><option value="0">P1 · Cyan / severozapad</option><option value="1">P2 · Violet / severoistok</option><option value="2">P3 · Amber / jugozapad</option><option value="3">P4 · Coral / jugoistok</option></select>
+      <button id="start" class="primary">Pokreni poligon <span>→</span></button>
+      <p class="disclaimer">Izaberi radnika, pa građevinu i lokaciju na mapi. Desni klik na nezavršenu građevinu nastavlja rad. Bez borbe i mrežne partije; kampovi i prodavnice su planirani sadržaj. Mapa je potpuno otkrivena za testiranje.</p>
+    </section>
+  </main>
+
+  <footer class="command-deck">
+    <section class="minimap-wrap"><div class="section-label">MAPA <span id="player-label">P1 / CYAN</span></div><canvas id="minimap" width="200" height="200" aria-label="Minimapa; klik pomera kameru"></canvas></section>
+    <section class="selection-panel"><div class="section-label">SELEKCIJA <span id="selected-count">1 OBJEKAT</span></div><div class="selected-details"><div id="portrait" class="portrait">⌂</div><div><h2 id="selection-name">WHR Centrala</h2><p id="selection-description">Tier 1 · proizvodnja i isporuka CODE-a</p><div id="health" class="health"><span></span></div><p id="selection-meta" class="meta">1.500 HP · bez napada</p></div></div><div id="queue" class="queue"></div></section>
+    <section class="actions-panel"><div class="section-label">KOMANDNI STO <span>TIER 1</span></div><div class="actions"><button id="train-worker" disabled><kbd>W</kbd><b>Radnik</b><span>50 ◆ · 15 s</span></button><button id="train-scout" disabled><kbd>S</kbd><b>Scout</b><span>75 ◆ · 20 s</span></button><button id="gather" disabled><kbd>G</kbd><b>Skupljaj</b><span>Najbliži CODE</span></button><button id="stop" disabled><kbd>H</kbd><b>Zaustavi</b><span>Pauziraj rad</span></button><button id="build-barracks" disabled><kbd>B</kbd><b>Kasarna</b><span>120 ◆ · 35 s</span></button><button id="build-relay" disabled><kbd>R</kbd><b>Relej</b><span>60 ◆ · 20 s</span></button><button id="build-base" disabled><kbd>C</kbd><b>Centrala</b><span>300 ◆ · 60 s</span></button><button id="cancel-build" disabled><kbd>X</kbd><b>Otkaži gradnju</b><span>Povraćaj 100 / 75%</span></button></div><p id="action-hint">Izaberi Centralu za proizvodnju ili radnika za gradnju.</p></section>
+  </footer>
+  <details class="helpbar"><summary aria-label="Pomoć i prečice">?</summary><span><b>LEVI KLIK</b> selekcija · prevuci za grupu</span><span><b>DESNI KLIK</b> kretanje / CODE / nastavak gradnje</span><span><b>TOČKIĆ</b> zoom · <b>STRELICE</b> kamera</span><span><b>SPACE</b> pauza · <b>ESC</b> odustani</span><span><b>W/S</b> radnik/Scout · <b>B/R/C</b> gradnja</span><span>Hotkeys: dodeli taster → jedan pritisak skače na cilj</span><span><a href="docs/README.md">Pravila i razvoj</a></span></details>
+
+  <dialog id="hotkeys-dialog" aria-labelledby="hotkeys-title">
+    <form id="hotkeys-form">
+      <div class="dialog-title"><h2 id="hotkeys-title">Hotkeys kamere</h2><button type="button" id="hotkeys-close" aria-label="Zatvori hotkeys">✕</button></div>
+      <p>Veži taster na jedinicu, zgradu ili ovaj pogled. Jedan pritisak odmah skače na cilj. Jedinicu pronalazi na trenutnom položaju.</p>
+      <label for="binding-target">Cilj</label><select id="binding-target"><option value="selection">Izabrana jedinica / zgrada / grupa</option><option value="location">Trenutna lokacija kamere</option></select>
+      <p id="binding-target-name" class="binding-detail"></p>
+      <label for="binding-key">Taster — klikni polje i pritisni željeno dugme</label><input id="binding-key" readonly placeholder="Npr. 1, 0, F1, F4, slovo…" autocomplete="off">
+      <p id="binding-conflict" role="status"></p>
+      <label id="binding-replace-row" hidden><input type="checkbox" id="binding-replace"> Zameni postojeću dodelu / komandu za ovaj taster</label>
+      <button id="binding-save" type="submit" disabled>Sačuvaj dodelu</button>
+      <p class="binding-detail">Escape zatvara. OS/browser može zadržati pojedine tastere. Dodele važe za ovu partiju; nova partija ih briše. Dok je panel otvoren, simulacija miruje.</p>
+      <ul id="binding-list" aria-label="Dodeljeni hotkeys"></ul>
+    </form>
+  </dialog>
+</body>
+</html>
