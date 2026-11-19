@@ -1,4 +1,4 @@
-/* WHR CODE FRONTIER · 0.6 · T1/T2 local simulation candidate. */
+/* WHR CODE FRONTIER · 0.6.1 · T1/T2 local simulation candidate. */
 (function (root) {
   'use strict';
   const RULES = Object.freeze({ hz: 20, cell: 16, cols: 160, rows: 160, workerCost: 50, scoutCost: 75,
@@ -173,11 +173,11 @@
     if(type==='worker')assignGather(game,u,initial>=0?game.nodes.filter(n=>n.owner===owner&&n.field==='home')[initial]:null);return u;}
   function releaseNode(game,u){const n=game.nodes.find(n=>n.id===u.nodeId);if(n&&n.miner===u.id)n.miner=null;u.work=0;}
   function releaseJob(game,u){if(u.jobId){const b=game.buildings.find(b=>b.id===u.jobId);if(b&&b.builderId===u.id)b.builderId=null;u.jobId=null;}}
-  function moveTo(game,u,p,mode,strict=false){const path=unitPath(game,u,p,strict);u.path=path||[];u.dest=p;u.pathRevision=game.navRevision;u.mode=path?mode:'blocked';u.resumeMode=mode;return !!path;}
+  function moveTo(game,u,p,mode,strict=false){const path=unitPath(game,u,p,strict);u.path=path||[];u.dest={x:p.x,y:p.y};u.pathRevision=game.navRevision;u.mode=path?mode:'blocked';u.resumeMode=mode;return !!path;}
   function pickNode(game,u){return game.nodes.filter(n=>n.owner===u.owner&&n.remaining>0).sort((a,b)=>(distance(a,u)+(a.miner?48:0))-(distance(b,u)+(b.miner?48:0)))[0];}
   function returnCargo(game,u){const bases=game.bases.filter(b=>b.owner===u.owner&&b.completed).sort((a,b)=>distance(a,u)-distance(b,u));
     for(const b of bases){const points=exitPoints(b).filter(p=>freeArrival(game,u,p)&&!game.units.some(v=>v!==u&&v.mode==='return'&&v.dest&&distance(v.dest,p)<12)).sort((a,b)=>distance(a,u)-distance(b,u));
-      for(const p of points){const path=unitPath(game,u,p,true);if(path){u.path=path;u.dest=p;u.mode='return';u.resumeMode='return';u.pathRevision=game.navRevision;return true;}}}
+      for(const p of points){const path=unitPath(game,u,p,true);if(path){u.path=path;u.dest={x:p.x,y:p.y};u.mode='return';u.resumeMode='return';u.pathRevision=game.navRevision;return true;}}}
     u.path=[];u.mode='blocked';u.resumeMode='return';return false;}
   function assignGather(game,u,node=null){if(u.type!=='worker')return false;releaseNode(game,u);releaseJob(game,u);
     node=node&&game.nodes.includes(node)&&node.remaining>0?node:pickNode(game,u);u.nodeId=node?node.id:null;
@@ -188,7 +188,7 @@
   function command(game,owner,ids,action,target){if(!game.running||game.paused||!mayControl(game,owner)||game.players[owner].defeated)return false;if(action==='attack')return attackCommand(game,owner,ids,target);let changed=false;const movers=game.units.filter(u=>u.owner===owner&&ids.includes(u.id)),slots=action==='move'&&movers.length>1&&target&&Number.isFinite(target.x)&&Number.isFinite(target.y)?formationTargets(game,movers,target):null;
     for(const u of game.units.filter(u=>u.owner===owner&&ids.includes(u.id))){
       if(action==='gather'&&u.type==='worker'){u.targetId=null;u.channel=null;assignGather(game,u,target);changed=true;}
-      if(action==='move'){if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))continue;u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.nodeId=null;const goal=slots?slots.get(u.id):target;if(goal)moveTo(game,u,goal,'move');else{u.path=[];u.dest=target;u.mode='blocked';u.resumeMode='move';}changed=true;}
+      if(action==='move'){if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))continue;u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.nodeId=null;const goal=slots?slots.get(u.id):target;if(goal)moveTo(game,u,goal,'move');else{u.path=[];u.dest={x:target.x,y:target.y};u.mode='blocked';u.resumeMode='move';}changed=true;}
       if(action==='stop'){u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);u.path=[];u.dest=null;u.mode='idle';u.nodeId=null;changed=true;}
     }return changed;}
   const supplyCap=(game,owner)=>Math.min(tierOf(game,owner)>=2?40:20,10+5*game.buildings.filter(b=>b.owner===owner&&b.type==='relay'&&b.completed).length);
@@ -213,10 +213,10 @@
   function beginBuild(game,owner,workerId,type,p){if(!game.running||game.paused)return{error:'Pokreni ili nastavi poligon.'};if(!mayControl(game,owner)||game.players[owner].defeated)return{error:'Nemaš kontrolu nad tom bazom.'};
     const check=placement(game,owner,type,p,workerId);if(check.error)return check;const d=BUILDINGS[type];if(game.players[owner].code<d.cost)return{error:'Nedovoljno CODE-a.'};
     const u=game.units.find(u=>u.id===workerId);u.targetId=null;u.channel=null;releaseNode(game,u);releaseJob(game,u);const b=makeBuilding('building'+game.nextId++,owner,type,check);game.players[owner].code-=d.cost;
-    game.buildings.push(b);if(type==='base')game.bases.push(b);b.builderId=u.id;u.jobId=b.id;rebuildNavigation(game);u.path=check.path;u.dest=check.point;u.mode='toBuild';u.pathRevision=game.navRevision;return{building:b,error:null};}
+    game.buildings.push(b);if(type==='base')game.bases.push(b);b.builderId=u.id;u.jobId=b.id;rebuildNavigation(game);u.path=check.path;u.dest={x:check.point.x,y:check.point.y};u.mode='toBuild';u.pathRevision=game.navRevision;return{building:b,error:null};}
   function resumeBuild(game,owner,workerId,buildingId){if(!game.running||game.paused||!mayControl(game,owner))return false;const u=game.units.find(u=>u.id===workerId&&u.owner===owner&&u.type==='worker'),b=game.buildings.find(b=>b.id===buildingId&&b.owner===owner&&!b.completed);
     if(!u||!b||(b.builderId&&b.builderId!==u.id))return false;
-    for(const p of approaches(game.blocked,b,u).filter(p=>freeArrival(game,u,p))){const path=unitPath(game,u,p,true);if(!path)continue;releaseNode(game,u);releaseJob(game,u);b.builderId=u.id;u.jobId=b.id;u.path=path;u.dest=p;u.mode='toBuild';u.pathRevision=game.navRevision;return true;}return false;}
+    for(const p of approaches(game.blocked,b,u).filter(p=>freeArrival(game,u,p))){const path=unitPath(game,u,p,true);if(!path)continue;releaseNode(game,u);releaseJob(game,u);b.builderId=u.id;u.jobId=b.id;u.path=path;u.dest={x:p.x,y:p.y};u.mode='toBuild';u.pathRevision=game.navRevision;return true;}return false;}
   function cancelBuild(game,owner,id){if(!game.running||game.paused||!mayControl(game,owner))return false;const b=game.buildings.find(b=>b.id===id&&b.owner===owner&&!b.completed);if(!b)return false;
     const u=game.units.find(u=>u.id===b.builderId);game.players[owner].code+=Math.floor(BUILDINGS[b.type].cost*(b.progress?0.75:1));game.buildings=game.buildings.filter(x=>x!==b);game.bases=game.bases.filter(x=>x!==b);rebuildNavigation(game);
     if(u){u.jobId=null;assignGather(game,u,game.nodes.find(n=>n.id===u.nodeId));}return true;}
@@ -393,7 +393,7 @@
       if(g.slowFields?.some(f=>f.owner!==u.owner&&f.until>g.tick&&distance(f,u)<=64))u.slowUntil=g.tick+2;
       if(u.type==='medic'){const t=g.units.filter(t=>t!==u&&t.owner===u.owner&&t.hp<maxHp(g,t)&&g.tick-t.lastDamage>=60&&distance(u,t)<=64&&!healTargets.has(t.id)).sort((a,b)=>a.hp/maxHp(g,a)-b.hp/maxHp(g,b))[0];if(t){t.hp=Math.min(maxHp(g,t),t.hp+0.4);healTargets.add(t.id);}continue;}
       if(u.mode==='repair'){const b=g.buildings.find(b=>b.id===u.targetId&&b.owner===u.owner&&b.completed);if(!b||b.hp>=maxHp(g,b)){u.mode='idle';u.targetId=null;continue;}
-        if(edgeDistance(u,b)>20){if(g.tick%10===0||!u.path.length){const p=approaches(g.blocked,b,u)[0];if(p){u.path=unitPath(g,u,p,true)||[];u.dest=p;u.pathRevision=g.navRevision;}}continue;}
+        if(edgeDistance(u,b)>20){if(g.tick%10===0||!u.path.length){const p=approaches(g.blocked,b,u)[0];if(p){u.path=unitPath(g,u,p,true)||[];u.dest={x:p.x,y:p.y};u.pathRevision=g.navRevision;}}continue;}
         if(++u.repairWork>=20){u.repairWork=0;const amount=Math.min(10,maxHp(g,b)-b.hp);if(g.players[u.owner].code>=amount/10){g.players[u.owner].code-=amount/10;b.hp+=amount;}}continue;}
       if(u.campId){
         if(u.recoverUntil>g.tick){u.hp=Math.min(u.maxHp,u.hp+u.maxHp/100);continue;}
@@ -406,7 +406,7 @@
       if(u.campId){if(t&&distance(u,u.home)<=160)u.lastContact=g.tick;if(distance(u,u.home)>160||!t&&g.tick-u.lastContact>=60){if(distance(u,u.home)>2){u.returning=true;u.targetId=null;u.path=unitPath(g,u,u.home)||[];}continue;}}
       if(t?.flying&&!u.campId&&!(u.type==='archer'&&tierOf(g,u.owner)>=2)){u.targetId=null;u.path=[];continue;}
       if(!t){if(u.mode==='attack'){u.mode='idle';u.path=[];}continue;}
-      if(edgeDistance(u,t)>d.range*16){if(u.owner>=0){if(g.tick%10===0||!u.path.length){const p=t.w?approaches(g.blocked,t,u)[0]:t;if(p){u.path=unitPath(g,u,p)||[];u.dest=p;u.pathRevision=g.navRevision;u.mode='attack';}}}else{u.path=unitPath(g,u,t)||[];travel(g,u,40);}continue;}
+      if(edgeDistance(u,t)>d.range*16){if(u.owner>=0){if(g.tick%10===0||!u.path.length){const p=t.w?approaches(g.blocked,t,u)[0]:t;if(p){u.path=unitPath(g,u,p)||[];u.dest={x:p.x,y:p.y};u.pathRevision=g.navRevision;u.mode='attack';}}}else{u.path=unitPath(g,u,t)||[];travel(g,u,40);}continue;}
       u.path=[];if(u.cooldown>g.tick)continue;u.cooldown=g.tick+d.period;damage(g,u,t,(t.w&&d.buildingDamage?d.buildingDamage:d.damage)+(d.hero?(u.level-1)*2:0));
     }
     for(const b of g.buildings.filter(b=>b.type==='tower'&&b.completed)){if(b.cooldown>g.tick)continue;const t=[...g.units,...g.neutrals].find(u=>u.owner!==b.owner&&(!u.flying||tierOf(g,b.owner)>=2)&&distance(b,u)<=128&&visibleTo(g,b.owner,u));if(t){damage(g,b,t,15);b.cooldown=g.tick+30;}}

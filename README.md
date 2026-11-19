@@ -1,6 +1,6 @@
 # WHR CODE FRONTIER
 
-WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.6 — lokalni strateški bot 1v1, kandidat za testiranje**.
+WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.6.1 — lokalni strateški bot 1v1, kandidat za testiranje**.
 
 Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, naloga niti API ključa. Provereni 0.5 ostaje zasebna verzija.
 
@@ -12,6 +12,10 @@ Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, n
 - Čuvar, Strelac, Bolničar, Razbijač; Akademija, podrška, radionica, Oltar i kule; tri globalna istraživanja.
 - Scoutove posete prodavnicama i Svetilištu; predmeti, predaja inventara, jedan heroj sa sposobnostima i oživljavanjem.
 - Aktivni T1/T2 NPC kampovi, doprinos u borbi, CODE/XP/loot i respawn; trenutna vidljivost i istražena mapa.
+
+## Hotfix 0.6.1
+
+Popravljena totalna blokada pri kontaktu dve vojske: cilj kretanja čuva samo koordinate, dok se borbena meta prati ID-jem. Dodate su [provere stvarnog kontakta i nastavka simulacije](docs/FIX_0_6_1_COMBAT_FREEZE.md).
 
 ## Igranje
 
