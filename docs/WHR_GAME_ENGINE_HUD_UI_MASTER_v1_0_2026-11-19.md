@@ -6,6 +6,8 @@ Status: ISTRAŽIVANJE + SPECIFIKACIJA KANDIDATA. Nije potvrda gotovog HUD-a niti
 
 OI: Nenad / Beli Zec. Implementacija i dokumentovanje: Codex. Projekat: WHR CODE FRONTIER / WHR Game Engine.
 
+> Implementaciona dopuna 19.11.2026: [Prototip 0.3](PROTOTYPE_0_3.md) uvodi kompaktan HUD i mapiranje kamera prečica. Donji izvorni nalazi i statusi opisuju istraživačku fazu; aktuelne implementirane funkcije i browser provere navedene su u dopuni. OI playtest ostaje otvoren.
+
 ## 1. Razlog i obavezujući smer
 
 OI je odbacio veliki naslovni pojas, prenaglašenu tipografiju, stalne natpise i velike donje panele iz prototipa. Mapa i upravljanje su izgubili prostor. Ova primedba je dokaz problema u stvarnoj upotrebi, a ne stvar ukusa koju AI može sam da proglasi rešenom.
