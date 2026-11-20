@@ -19,7 +19,7 @@ function valid(type,a){if(!Array.isArray(a)||a.length>5)return false;
  case 'shopBuy':case 'transferItem':return a.length===3&&a.every(id);
  case 'summonHero':return a.length===2&&id(a[0])&&['bastion','pulsar','echo'].includes(a[1]);
  case 'ability':return a.length>=2&&a.length<=3&&id(a[0])&&[0,1].includes(a[1])&&(a[2]===undefined||point(a[2]));
- case 'interactMove':return a.length===2&&id(a[0])&&target(a[1]);
+ case 'interactMove':return a.length===2&&ids(a[0])&&target(a[1]);
  default:return false;
  }}
 function command(m){return m&&Object.keys(m).every(k=>['kind','seq','type','args'].includes(k))&&m.kind==='command'&&Number.isSafeInteger(m.seq)&&m.seq>0&&valid(m.type,m.args);}

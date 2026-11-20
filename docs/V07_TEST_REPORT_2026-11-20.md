@@ -13,14 +13,14 @@ Datum: 20.11.2026. Osnova 0.6.2; kompletan V7 kandidat je izdvojen. **OI igranje
 | controls | 21 | PASS |
 | bots | 12 | PASS |
 | combat-contact | 3 | PASS |
-| tier3 | 16 | PASS |
+| tier3 | 17 | PASS |
 | traffic-v7 | 4 | PASS |
 | bots-tier3 | 1 duži scenario | PASS |
-| network | 13 | PASS |
+| network | 14 | PASS |
 | network-impairment | 4 | PASS |
 | stability-v7 | 1 duži scenario | PASS |
 
-Ukupno **136 slučaja u 13 Node suite-ova**. `tests/run-node.cjs` izvršava sve; svaki neuspeh prekida runner nenultim izlaznim kodom. Broj nije tvrdnja da je pokrivena svaka moguća kombinacija svih V7 MASTER scenarija.
+Ukupno **138 slučaja u 13 Node suite-ova**. `tests/run-node.cjs` izvršava sve; svaki neuspeh prekida runner nenultim izlaznim kodom. Broj nije tvrdnja da je pokrivena svaka moguća kombinacija svih V7 MASTER scenarija.
 
 ## Browser
 
