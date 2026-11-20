@@ -160,3 +160,5 @@ dialog select, #binding-key { width: 100%; padding: 10px; background: #1b3338; c
 @media(max-width:640px){ .actions{grid-template-rows:repeat(3,54px);} .selection-panel{bottom:188px;} .topbar .clock{display:none;} #tier-label{font-size:11px;} }
 
 #build-tower {grid-row:2;grid-column:4;} #ability-0 {grid-column:3;} #ability-1 {grid-column:4;}
+
+#control-groups{position:fixed;z-index:4;top:55px;left:10px;display:flex;gap:4px;max-width:calc(100vw - 20px);overflow-x:auto}#control-groups[hidden]{display:none}#control-groups button,#order-tools button{font-size:11px;padding:4px 7px;min-height:24px}#order-tools{display:flex;flex-wrap:wrap;gap:3px}#unit-orders,#rally-status{max-width:320px;max-height:48px;overflow:auto;font-size:11px;margin:4px 0}#unit-orders:empty,#rally-status:empty{display:none}#hotkeys-dialog details{font-size:12px;margin:8px 0}#hotkeys-dialog details label{display:flex;gap:8px;align-items:center}#edge-speed{max-width:100px}@media(max-width:900px){#control-groups{top:101px}}

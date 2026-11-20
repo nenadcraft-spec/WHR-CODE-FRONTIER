@@ -8,6 +8,8 @@
 
 [Prototip 0.3: HUD i hotkeys](PROTOTYPE_0_3.md) · [Mapa/gradnja 0.2](PROTOTYPE_0_2.md) · [Pokreni klijent](../index.html)
 
+[Prototip 0.6.2: upravljanje](PROTOTYPE_0_6_2.md) · [Upravljanje MASTER](WHR_GAME_ENGINE_HOTFIX_0_6_2_UPRAVLJANJE_MASTER_v1_0_2026-11-20.md)
+
 ## MASTER dokumenti
 
 - [HUD, UI, hotkeys i testiranje](WHR_GAME_ENGINE_HUD_UI_MASTER_v1_0_2026-11-19.md) · [Skica HUD-a A](WHR_GAME_ENGINE_HUD_WIREFRAME_A_v1_0.svg) — istraživanje i kandidat; implementacija osnovnog HUD-a i kamera prečica u 0.3, ljudski test PENDING.

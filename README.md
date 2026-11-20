@@ -1,17 +1,21 @@
 # WHR CODE FRONTIER
 
-WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.6.1 — lokalni strateški bot 1v1, kandidat za testiranje**.
+WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.6.2 — selekcija, kamera, rally i Shift redovi, kandidat za testiranje**.
 
-Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, naloga niti API ključa. Provereni 0.5 ostaje zasebna verzija.
+Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, naloga niti API ključa. Prethodni 0.6.1 ostaje zasebna verzija.
 
 - Izbor režima pre starta: poligon ili lokalni 1v1 protiv strateškog bota, sa istom početnom ekonomijom i gameplay pravilima.
 - Fizički radijusi, A* sa proverom širine, swept provera prepreka i jedinica, odvojena mesta dolaska za grupu. Dugme **Radijusi** prikazuje fizičke krugove; čekanje zadržava nalog.
 - Mapa 160 × 160 logičkih ćelija, 16 render jedinica po ćeliji; simulacija 20 Hz, nezavisna od kamere.
-- Kompaktan HUD i podesivi hotkeys: jedinice, zgrade, grupe i lokacije; jedan pritisak skače na cilj.
+- Kompaktan HUD i podesivi hotkeys: jedinice, zgrade, grupe i lokacije; jedan pritisak bira objekat/grupu i skače na cilj; lokacija menja samo kameru.
 - CODE ekonomija, radnici, gradnja, proširenja, populacija i globalni T2 upgrade.
 - Čuvar, Strelac, Bolničar, Razbijač; Akademija, podrška, radionica, Oltar i kule; tri globalna istraživanja.
 - Scoutove posete prodavnicama i Svetilištu; predmeti, predaja inventara, jedan heroj sa sposobnostima i oživljavanjem.
 - Aktivni T1/T2 NPC kampovi, doprinos u borbi, CODE/XP/loot i respawn; trenutna vidljivost i istražena mapa.
+
+## Upravljanje 0.6.2
+
+Ctrl+1–0 pamti grupu, Shift+1–0 dopunjava. Kamera radi ivicom ekrana, srednjim dugmetom i minimapom. Rally za proizvođače; Shift redovi pokreta, gradnje i skupljanja uz rezervisanje CODE-a. Attack-move, Hold, Patrol i Follow. [Brza proba i granice](docs/PROTOTYPE_0_6_2.md) · [Upravljanje MASTER](docs/WHR_GAME_ENGINE_HOTFIX_0_6_2_UPRAVLJANJE_MASTER_v1_0_2026-11-20.md).
 
 ## Hotfix 0.6.1
 
@@ -23,7 +27,7 @@ Za bota pre starta izaberi **Režim → Lokalni 1v1 · protiv strateškog bota**
 
 Levi klik bira, prevlačenje bira grupu. Desni klik zadaje pokret/rudarenje/nastavak gradnje ili napad na vidljivog protivnika. Izaberite radnika za gradnju; završenu Centralu za obuku i **U — T2**; vojnu zgradu za njene jedinice. T2 traži završenu Kasarnu i Relej, 300 CODE i 60 s. Sve cene, uslovi i dostupne komande prikazani su uz izabrani objekat.
 
-**A** bira metu napada, **L** metu popravke, **D/F** herojske sposobnosti; Escape/desni klik otkazuje izbor mete. **W/S** radnik/Scout, **B/R/C** Kasarna/Relej/Centrala, **G/H** skupljanje/stop, **X** otkazivanje gradilišta. Ostale komande imaju dugmad; nisu svim komandama unapred dodeljeni tasteri. Panel **Hotkeys** mapira bilo koji podržani taster na trenutnu selekciju ili lokaciju; eksplicitna zamena rešava sukob sa podrazumevanom komandom. Nova partija briše dodele.
+**A** bira metu napada ili Attack-move na teren; **J/P/V** Hold/Patrol/Follow; **Y** rally. Shift dodaje nalog u red. **A** bira metu napada, **L** metu popravke, **D/F** herojske sposobnosti; Escape/desni klik otkazuje izbor mete. **W/S** radnik/Scout, **B/R/C** Kasarna/Relej/Centrala, **G/H** skupljanje/stop, **X** otkazivanje gradilišta. Ostale komande imaju dugmad; nisu svim komandama unapred dodeljeni tasteri. Panel **Hotkeys** mapira bilo koji podržani taster na trenutnu selekciju ili lokaciju; eksplicitna zamena rešava sukob sa podrazumevanom komandom. Nova partija briše dodele.
 
 Izaberite Scouta i desnim klikom na vidljivu prodavnicu/Svetilište zadajte prilazak. Panel traži rastojanje do 2 mapne jedinice za kupovinu/prizivanje. Predmeti se koriste dugmetom; **→** zatim klik na sopstvenu obližnju jedinicu predaje predmet. Prvo pozivanje heroja radi na T1; druga sposobnost i Oltar zahtevaju T2.
 
@@ -49,12 +53,16 @@ node tests/construction.cjs
 node tests/tier2.cjs
 node tests/navigation.cjs
 node tests/bots.cjs
+node tests/combat-contact.cjs
+node tests/controls.cjs
 # Browser provere zahtevaju Playwright i Chromium:
 node tests/browser.cjs
 node tests/hud.cjs
 node tests/tier2-browser.cjs
 node tests/navigation-browser.cjs
 node tests/bots-browser.cjs
+node tests/combat-contact-browser.cjs
+node tests/controls-browser.cjs
 ```
 
 Za Chromium na drugoj putanji podesite `WHR_CHROMIUM_PATH`. Browser provere izvršavaju lokalne fajlove preko presretnutih zahteva, bez servera i pristupa internetu. `tier2-browser` dodaje CODE samo u izolovanoj testnoj kopiji, radi pokrivanja celog sadržaja; to nije dokaz normalne brzine ekonomskog razvoja.
