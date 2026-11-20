@@ -1,68 +1,25 @@
-# WHR CODE FRONTIER
+# WHR CODE FRONTIER — 0.7.0 kandidat
 
-WHR Game Engine: browser RTS u razvoju. Lokalni prototip **0.6.2 — selekcija, kamera, rally i Shift redovi, kandidat za testiranje**.
+WHR Game Engine: browser RTS sa CODE ekonomijom, T1–T3 razvojem, lokalnim strateškim botom i autoritativnim mrežnim 1v1/2v2 serverom.
 
-Otvorite `index.html` direktno u desktop pregledaču. Nema instalacije, CDN-a, naloga niti API ključa. Prethodni 0.6.1 ostaje zasebna verzija.
+Otvorite `index.html` za lokalni poligon/bota. Za mrežu pokrenite `START_SERVER.cmd` ili `npm start`, zatim otvorite **http://127.0.0.1:8080**. Git checkout prvo zahteva `npm ci`; Windows paket uključuje ws biblioteku. Node.js 24 ili 26 je potreban za server. Igraču nije potreban OpenAI ključ ili LLM servis.
 
-- Izbor režima pre starta: poligon ili lokalni 1v1 protiv strateškog bota, sa istom početnom ekonomijom i gameplay pravilima.
-- Fizički radijusi, A* sa proverom širine, swept provera prepreka i jedinica, odvojena mesta dolaska za grupu. Dugme **Radijusi** prikazuje fizičke krugove; čekanje zadržava nalog.
-- Mapa 160 × 160 logičkih ćelija, 16 render jedinica po ćeliji; simulacija 20 Hz, nezavisna od kamere.
-- Kompaktan HUD i podesivi hotkeys: jedinice, zgrade, grupe i lokacije; jedan pritisak bira objekat/grupu i skače na cilj; lokacija menja samo kameru.
-- CODE ekonomija, radnici, gradnja, proširenja, populacija i globalni T2 upgrade.
-- Čuvar, Strelac, Bolničar, Razbijač; Akademija, podrška, radionica, Oltar i kule; tri globalna istraživanja.
-- Scoutove posete prodavnicama i Svetilištu; predmeti, predaja inventara, jedan heroj sa sposobnostima i oživljavanjem.
-- Aktivni T1/T2 NPC kampovi, doprinos u borbi, CODE/XP/loot i respawn; trenutna vidljivost i istražena mapa.
+- Prihvaćene 0.6.2 kontrole: Ctrl/Shift grupe, objekatski hotkeys sa selekcijom i kamerom, edge scroll, srednji miš, minimapa, rally, Shift redovi i CODE rezervacije.
+- Propuštanje saveznika u tesnacu uz fizičke radijuse i očuvanje cilja. Hold i neprijateljska blokada ostaju važeći.
+- T3: globalni razvoj, letelice, transport, teleport, Senka/detekcija, kampovi i Scout čizme. Otvorene brojke su eksplicitni kandidati za OI probu.
+- Mreža: serverov svet na 20 Hz; zasebni dozvoljeni pogledi, odložene potvrde, deduplikacija komandi, reconnect i timska vizija/rezultat.
 
-## Upravljanje 0.6.2
-
-Ctrl+1–0 pamti grupu, Shift+1–0 dopunjava. Kamera radi ivicom ekrana, srednjim dugmetom i minimapom. Rally za proizvođače; Shift redovi pokreta, gradnje i skupljanja uz rezervisanje CODE-a. Attack-move, Hold, Patrol i Follow. [Brza proba i granice](docs/PROTOTYPE_0_6_2.md) · [Upravljanje MASTER](docs/WHR_GAME_ENGINE_HOTFIX_0_6_2_UPRAVLJANJE_MASTER_v1_0_2026-11-20.md).
-
-## Hotfix 0.6.1
-
-Popravljena totalna blokada pri kontaktu dve vojske: cilj kretanja čuva samo koordinate, dok se borbena meta prati ID-jem. Dodate su [provere stvarnog kontakta i nastavka simulacije](docs/FIX_0_6_1_COMBAT_FREEZE.md).
-
-## Igranje
-
-Za bota pre starta izaberi **Režim → Lokalni 1v1 · protiv strateškog bota**, pa početnu bazu i pokreni. Protivnik je dijagonalno. Startno nema bonus CODE-a niti instant jedinica. Pauza zamrzava i bota. Reset vraća svet i briše njegove odluke/komande. Rezultat lokalnog meča prikazuje se u kompaktnom gornjem statusu; to nije povezivanje dva računara.
-
-Levi klik bira, prevlačenje bira grupu. Desni klik zadaje pokret/rudarenje/nastavak gradnje ili napad na vidljivog protivnika. Izaberite radnika za gradnju; završenu Centralu za obuku i **U — T2**; vojnu zgradu za njene jedinice. T2 traži završenu Kasarnu i Relej, 300 CODE i 60 s. Sve cene, uslovi i dostupne komande prikazani su uz izabrani objekat.
-
-**A** bira metu napada ili Attack-move na teren; **J/P/V** Hold/Patrol/Follow; **Y** rally. Shift dodaje nalog u red. **A** bira metu napada, **L** metu popravke, **D/F** herojske sposobnosti; Escape/desni klik otkazuje izbor mete. **W/S** radnik/Scout, **B/R/C** Kasarna/Relej/Centrala, **G/H** skupljanje/stop, **X** otkazivanje gradilišta. Ostale komande imaju dugmad; nisu svim komandama unapred dodeljeni tasteri. Panel **Hotkeys** mapira bilo koji podržani taster na trenutnu selekciju ili lokaciju; eksplicitna zamena rešava sukob sa podrazumevanom komandom. Nova partija briše dodele.
-
-Izaberite Scouta i desnim klikom na vidljivu prodavnicu/Svetilište zadajte prilazak. Panel traži rastojanje do 2 mapne jedinice za kupovinu/prizivanje. Predmeti se koriste dugmetom; **→** zatim klik na sopstvenu obližnju jedinicu predaje predmet. Prvo pozivanje heroja radi na T1; druga sposobnost i Oltar zahtevaju T2.
-
-## Granice kandidata
-
-Poligon zadržava četiri početne ekonomije. Lokalni 1v1 koristi čoveka na izabranoj poziciji i bota dijagonalno, bez druga dva igrača. Prvi bot ima jedan razvojni plan: radnici, gradnja, vojska, T2, izviđanje, kamp/napad, odbrana i povlačenje ranjenih. Nema online servera, lobby-ja, 2v2 timskog režima, timske zajedničke vizije, T3 vojske, snimanja/replay-a ni integrisanog Color Engine-a. Bot još nema naprednu ekspanzionu politiku, kupovinu opreme ili podesive težine. Magla koristi kružni vidokrug bez blokiranja linije vida šumom. Navigacija sada proverava fizički radijus i lokalno zaobilazi jedinice. Potpuno koordinisano propuštanje u uskim prolazima i napredne formacije još nisu uvedeni; nerešiva gužva bezbedno čeka. Ako ranije nevažeći položaji već sadrže preklapanje, jedinice mogu da se udalje, bez teleportovanja. Dijagnostički `WHR.snapshot()` vidi lokalno stanje i nije mrežna zaštita od varanja. Grafika je proceduralna razvojna skica. Novi balans i razrešena otvorena pravila su kandidati za OI proveru.
-
-## Dokumentacija i provere
-
-- [Botovi i multiplayer MASTER](docs/WHR_GAME_ENGINE_BOTOVI_MULTIPLAYER_MASTER_v1_0_2026-11-19.md)
-- [v0.6 lokalni bot](docs/PROTOTYPE_0_6.md)
-- [Navigacija → botovi → multiplayer MASTER](docs/WHR_GAME_ENGINE_NAVIGACIJA_BOTOVI_MULTIPLAYER_MASTER_v1_0_2026-11-19.md)
-- [v0.5 kandidat](docs/PROTOTYPE_0_5.md)
-- [v0.4 MASTER i odluke](docs/WHR_RTS_V04_T1_T2_IMPLEMENTACIJA_MASTER_v1_0_2026-11-19.md)
-- [v0.4 kontrole, uslovi i provere](docs/PROTOTYPE_0_4.md)
-- [Izvorni MASTER dokumenti](docs/README.md)
-- [Istorijski v0.3 HUD](docs/PROTOTYPE_0_3.md)
+[Pokretanje i igranje](docs/PROTOTYPE_0_7.md) · [Kandidatske odluke](docs/V07_ODLUKE_KANDIDAT_001.md) · [Izvršene provere i granice](docs/V07_TEST_REPORT_2026-11-20.md) · [V7 MASTER](docs/WHR_GAME_ENGINE_V07_MASTER_v1_0_2026-11-20.md)
 
 ```sh
-node --check script.js
-node tests/economy.cjs
-node tests/construction.cjs
-node tests/tier2.cjs
-node tests/navigation.cjs
-node tests/bots.cjs
-node tests/combat-contact.cjs
-node tests/controls.cjs
-# Browser provere zahtevaju Playwright i Chromium:
-node tests/browser.cjs
-node tests/hud.cjs
-node tests/tier2-browser.cjs
-node tests/navigation-browser.cjs
-node tests/bots-browser.cjs
-node tests/combat-contact-browser.cjs
-node tests/controls-browser.cjs
+npm ci
+npm run build
+npm test
+npm start
+# Chromium provere, uz instaliran Playwright i Chromium:
+node tests/run-browser.cjs
 ```
 
-Za Chromium na drugoj putanji podesite `WHR_CHROMIUM_PATH`. Browser provere izvršavaju lokalne fajlove preko presretnutih zahteva, bez servera i pristupa internetu. `tier2-browser` dodaje CODE samo u izolovanoj testnoj kopiji, radi pokrivanja celog sadržaja; to nije dokaz normalne brzine ekonomskog razvoja.
+`core.part` i `ui.part` su izvori za build; `tools/build.cjs` spaja ih u `script.js` i upisuje hash pravila za handshake. Menjanje izvora zahteva novi build i restart servera; ne menjati `script.js` samostalno. Server koristi isti generisani modul kao Node testovi. Promena klijentskog izgleda ne menja logičku mapu 160×160 i simulaciju 20 Hz.
+
+ws 8.23.0 je zaključan u package-lock-u; MIT licenca je u `third_party/ws-LICENSE.txt`. Za javno puštanje obavezni su stvarni WSS/hosting i dodatna proba dva računara; nisu postavljeni ovom isporukom. Nema save/replay-a, 3D integracije ili garantovanog razrešenja svake gužve. OI prihvatanje V7 još čeka igranje.

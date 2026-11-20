@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-20",
+  "wsInfo": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ws @ 8.23.0 | MIT\n\nSimple to use, blazing fast and thoroughly tested websocket client and server\nfor Node.js\n\nRepository       https://github.com/websockets/ws (22k stars, 2.6k forks, 6 issues)\nHomepage         https://github.com/websockets/ws\nPublished        7 days ago\nDownloads        1.6B / month\nVulnerabilities  Latest: none affected\n                 History: 7 known advisories across all versions"
+      }
+    ],
+    "structuredContent": null,
+    "isError": false
+  },
+  "wsVulns": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ws @ 8.23.0 | npm\nNo active vulnerabilities affect this version (7 advisories do not apply).\n\nResolved dependencies\nNo affected advisory occurrences found; 0 resolved package versions checked."
+      }
+    ],
+    "structuredContent": null,
+    "isError": false
+  },
+  "githitsRead": {
+    "content": [
+      {
+        "type": "text",
+        "text": "read | README.md | markdown | lines 1-40/539\nSources:\n  - github:websockets/ws@0cc91857 (committed 2026-11-16, indexed from ref HEAD)\n\n 1  # ws: a Node.js WebSocket library\n 2  \n 3  [![Version npm](https://img.shields.io/npm/v/ws.svg?logo=npm)](https://www.npmjs.com/package/ws)\n 4  [![CI](https://img.shields.io/github/actions/workflow/status/websockets/ws/ci.yml?branch=master&label=CI&logo=github)](https://github.com/websockets/ws/actions?query=workflow%3ACI+branch%3Amaster)\n 5  [![Coverage Status](https://img.shields.io/coveralls/websockets/ws/master.svg?logo=coveralls)](https://coveralls.io/github/websockets/ws)\n 6  \n 7  ws is a simple to use, blazing fast, and thoroughly tested WebSocket client and\n 8  server implementation.\n 9  \n10  Passes the quite extensive Autobahn test suite: [server][server-report],\n11  [client][client-report].\n12  \n13  **Note**: This module does not work in the browser. The client in the docs is a\n14  reference to a backend with the role of a client in the WebSocket communication.\n15  Browser clients must use the native\n16  [`WebSocket`](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket)\n17  object. To make the same code work seamlessly on Node.js and the browser, you\n18  can use one of the many wrappers available on npm, like\n19  [isomorphic-ws](https://github.com/heineiuo/isomorphic-ws).\n20  \n21  ## Table of Contents\n22  \n23  - [Protocol support](#protocol-support)\n24  - [Installing](#installing)\n25    - [Legacy opt-in for performance](#legacy-opt-in-for-performance)\n26  - [API docs](#api-docs)\n27  - [WebSocket compression](#websocket-compression)\n28  - [Usage examples](#usage-examples)\n29    - [Sending and receiving text data](#sending-and-receiving-text-data)\n30    - [Sending binary data](#sending-binary-data)\n31    - [Simple server](#simple-server)\n32    - [External HTTP/S server](#external-https-server)\n33    - [Multiple servers sharing a single HTTP/S server](#multiple-servers-sharing-a-single-https-server)\n34    - [Client authentication](#client-authentication)\n35    - [Server broadcast](#server-broadcast)\n36    - [Round-trip time](#round-trip-time)\n37    - [Use the Node.js streams API](#use-the-nodejs-streams-api)\n38    - [Other examples](#other-examples)\n39  - [FAQ](#faq)\n40    - [How to get the IP address of the client?](#how-to-get-the-ip-address-of-the-client)"
+      }
+    ],
+    "structuredContent": null,
+    "isError": false
+  },
+  "main": "e42eea6762066e6e3cc87d71d30e31cbdd8000bd",
+  "wsSource": "0cc9185755faa9b92b9efd566a8ee9f65fffd923",
+  "colyseusSource": "31bb1a8bd1359d742c104a370cb32eb5cdf69721",
+  "researchTimeouts": [
+    {
+      "status": "fulfilled",
+      "value": {
+        "content": [
+          {
+            "type": "text",
+            "text": "tool call error: tool call failed for `codex_apps/githits.research`\n\nCaused by:\n    Mcp error: -32603: MCP request timed out"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "status": "fulfilled",
+      "value": {
+        "content": [
+          {
+            "type": "text",
+            "text": "tool call error: tool call failed for `codex_apps/githits.research`\n\nCaused by:\n    Mcp error: -32603: MCP request timed out"
+          }
+        ],
+        "isError": true
+      }
+    }
+  ]
+}
