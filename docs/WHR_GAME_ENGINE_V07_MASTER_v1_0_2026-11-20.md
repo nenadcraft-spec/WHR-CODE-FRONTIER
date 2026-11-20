@@ -16,7 +16,7 @@ OI traži V7 koji unapređuje kretanje vojske kroz gužve, kompletira T3 i uvodi
 | Upravljanje 0.6.2 | OI testirao i prihvatio u razgovoru; PR #6 spojen u main prema dostavljenoj slici |
 | Prethodne automatizovane provere | 97 Node provera i 7 Chromium scenarija za 0.6.2; nisu dokaz V7 |
 | V7 MASTER | Napisan kao plan i kriterijumi prihvatanja |
-| V7 kod / V7 testovi / V7 OI proba | IMPLEMENTIRAN KANDIDAT / 136 Node slučaja + 9 browser scenarija PASS / NOT_RUN |
+| V7 kod / V7 testovi / V7 OI proba | IMPLEMENTIRAN KANDIDAT / 138 Node slučaja + 9 browser scenarija PASS / NOT_RUN |
 | T3 brojke | Preuzete iz izvornog MASTER-a; kandidati za balans |
 | Novi tehnički parametri | Predlozi; meriti i verzionisati pre zaključavanja |
 

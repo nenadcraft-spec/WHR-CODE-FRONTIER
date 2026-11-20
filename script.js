@@ -340,25 +340,25 @@
   function inventoryCapacity(u){return u.type==='scout'?(u.inventory.some(i=>i.type==='bag')?6:4):UNIT[u.type]?.hero?6:1;}
   function canCarry(u,key){return u.type==='scout'||UNIT[u.type]?.hero?(u.type==='scout'||!ITEMS[key].only):key==='aid';}
   function shopBuy(g,o,unitId,shopId,key){const u=g.units.find(u=>u.id===unitId&&u.owner===o),s=g.map.shops.find(s=>s.id===shopId),d=ITEMS[key],p=g.players[o];
-    if(!g.running||g.paused||!mayControl(g,o)||p.defeated||!u||!s||!d||!visibleTo(g,o,s)||distance(u,s)>32)return'Priđi prodavnici na najviše 2 mapne jedinice.';
+    if(!g.running||g.paused||!mayControl(g,o)||p.defeated||!u||u.transportedBy||!s||!d||!visibleTo(g,o,s)||distance(u,s)>32)return'Priđi prodavnici na najviše 2 mapne jedinice.';
     if(p.tier<d.tier)return'Potreban T2.';if(!canCarry(u,key))return'Predmet nije namenjen toj jedinici.';if(!s.stock[key])return'Predmet nije na zalihi.';if(availableCode(g,o)<d.cost)return'Nedovoljno CODE-a.';
     const old=u.inventory.find(i=>i.type===(key==='boots3'?'boots2':'boots1'));if(d.upgrade&&!old)return'Prvo nabavi T1 čizme.';
     if(!d.consumable&&!d.upgrade&&u.inventory.some(i=>i.type===key||key==='boots1'&&['boots2','boots3'].includes(i.type)))return'Oprema je već prisutna.';
     if(!d.upgrade&&u.inventory.length>=inventoryCapacity(u))return'Inventar je pun.';
     p.code-=d.cost;s.stock[key]--;s.pending.push({key,at:g.tick+d.restock});if(d.upgrade)old.type=key;else u.inventory.push({id:'item'+g.nextItem++,type:key});return null;}
   function transferItem(g,o,fromId,toId,itemId){const a=g.units.find(u=>u.id===fromId&&u.owner===o),b=g.units.find(u=>u.id===toId&&u.owner===o),item=a?.inventory.find(i=>i.id===itemId);
-    if(!g.running||g.paused||!mayControl(g,o)||!a||!b||a===b||!item||distance(a,b)>32)return'Predaja zahteva dve svoje jedinice na udaljenosti do 2.';
+    if(!g.running||g.paused||!mayControl(g,o)||!a||!b||a.transportedBy||b.transportedBy||a===b||!item||distance(a,b)>32)return'Predaja zahteva dve svoje jedinice na udaljenosti do 2.';
     if(item.type==='bag'||!canCarry(b,item.type)||ITEMS[item.type].only&&b.type!==ITEMS[item.type].only)return'Taj predmet nije prenosiv toj jedinici.';
     if(!ITEMS[item.type].consumable&&b.inventory.some(i=>i.type===item.type))return'Primalac već ima opremu.';if(b.inventory.length>=inventoryCapacity(b))return'Inventar primaoca je pun.';
     a.inventory=a.inventory.filter(i=>i!==item);b.inventory.push(item);a.hp=Math.min(a.hp,maxHp(g,a));return null;}
   function useItem(g,o,id,itemId){const u=g.units.find(u=>u.id===id&&u.owner===o),item=u?.inventory.find(i=>i.id===itemId);
-    if(!g.running||g.paused||!mayControl(g,o)||!item)return'Izaberi sopstveni predmet.';
+    if(!g.running||g.paused||!mayControl(g,o)||!item||u.transportedBy)return'Izaberi sopstveni predmet van transportera.';
     if(item.type==='aid'){if(u.hp>=maxHp(g,u))return'Zdravlje je puno.';u.healBuff={remaining:120,started:g.tick};}
     else if(item.type==='signal'&&u.type==='scout'){const b=g.bases.filter(b=>b.owner===o&&b.completed).sort((a,b)=>distance(u,a)-distance(u,b))[0];if(!b)return'Nema završene Centrale.';releaseNode(g,u);releaseJob(g,u);u.path=[];u.targetId=null;u.mode='channel';u.channel={remaining:80,baseId:b.id};}
     else return'Oprema deluje pasivno kod odgovarajućeg nosioca.';
     u.inventory=u.inventory.filter(i=>i!==item);return null;}
   function summonHero(g,o,scoutId,type){const p=g.players[o],u=g.units.find(u=>u.id===scoutId&&u.owner===o&&u.type==='scout'),b=g.bases.find(b=>b.owner===o&&b.completed);
-    if(!g.running||g.paused||!mayControl(g,o)||p.defeated||!UNIT[type]?.hero||!u||!b||distance(u,g.shrine)>32)return'Scout mora prići centralnom Svetilištu na 2 jedinice.';
+    if(!g.running||g.paused||!mayControl(g,o)||p.defeated||!UNIT[type]?.hero||!u||u.transportedBy||!b||distance(u,g.shrine)>32)return'Scout mora prići centralnom Svetilištu na 2 jedinice.';
     if(p.hero||p.heroJob)return'Jedan herojski izbor po igraču.';if(availableCode(g,o)<200)return'Potrebno 200 CODE.';if(population(g,o)+reservedPop(g,o)+4>supplyCap(g,o))return'Nema 4 slobodne populacije.';
     p.code-=200;p.hero={type,xp:0,level:1,inventory:[],dead:true};p.heroJob={type,baseId:b.id,remaining:600,duration:600};return null;}
   function reviveHero(g,o,id){const p=g.players[o],b=g.buildings.find(b=>b.id===id&&b.owner===o&&b.type==='altar'&&b.completed);
@@ -382,14 +382,14 @@
     else{const builder=g.units.find(u=>u.id===o.builderId);if(builder){builder.jobId=null;builder.mode='idle';builder.path=[];}g.buildings=g.buildings.filter(b=>b!==o);g.bases=g.bases.filter(b=>b!==o);rebuildNavigation(g);}
     emit(g,'death',o.owner,{id:o.id});}
   function grantXP(g,u,amount){u.xp+=amount;const thresholds=[0,100,250,450,700];u.level=thresholds.reduce((n,t,i)=>u.xp>=t?i+1:n,1);g.players[u.owner].hero.xp=u.xp;g.players[u.owner].hero.level=u.level;}
-  function ability(g,o,id,slot,point){const u=g.units.find(u=>u.id===id&&u.owner===o&&UNIT[u.type]?.hero);if(!g.running||g.paused||!mayControl(g,o)||!u||![0,1].includes(slot))return'Izaberi svog heroja.';if(slot===1&&tierOf(g,o)<2)return'Druga sposobnost zahteva T2.';if(u.abilityReady[slot]>g.tick)return'Sposobnost se obnavlja.';
+  function ability(g,o,id,slot,point){const u=g.units.find(u=>u.id===id&&u.owner===o&&UNIT[u.type]?.hero);if(!g.running||g.paused||!mayControl(g,o)||!u||u.transportedBy||![0,1].includes(slot))return'Izaberi svog heroja.';if(slot===1&&tierOf(g,o)<2)return'Druga sposobnost zahteva T2.';if(u.abilityReady[slot]>g.tick)return'Sposobnost se obnavlja.';
     if(u.type==='bastion'){if(slot===0){u.shield=120;u.shieldUntil=g.tick+100;}else{g.auras??=[];g.auras.push({owner:o,x:u.x,y:u.y,until:g.tick+120});}u.abilityReady[slot]=g.tick+(slot?400:240);}
     else{if(!point||!Number.isFinite(point.x)||!Number.isFinite(point.y)||point.x<0||point.y<0||point.x>=WIDTH||point.y>=HEIGHT||distance(u,point)>96||!visibleTo(g,o,point))return'Izaberi vidljivu metu do dometa 6.';
       if(u.type==='pulsar'){const targets=attackables(g).filter(t=>t.owner!==o&&visibleTo(g,o,t)&&(slot?distance(t,point)<=32:distance(t,point)<=20));if(!targets.length)return'Nema neprijateljske mete.';for(const t of slot?targets:targets.slice(0,1))damage(g,u,t,slot?45:60);u.abilityReady[slot]=g.tick+(slot?320:200);}
       else if(slot===0){const t=g.units.find(t=>t.owner===o&&distance(t,point)<=20);if(!t||distance(u,t)>80)return'Izaberi svog saveznika do dometa 5.';t.hp=Math.min(maxHp(g,t),t.hp+80);u.abilityReady[0]=g.tick+200;}
       else{g.slowFields??=[];g.slowFields.push({owner:o,x:point.x,y:point.y,until:g.tick+120});u.abilityReady[1]=g.tick+360;}}
     emit(g,'ability',o,{id,slot});return null;}
-  function pickupLoot(g,o,id,lootId){const u=g.units.find(u=>u.id===id&&u.owner===o),l=g.loot.find(l=>l.id===lootId);if(!g.running||g.paused||!mayControl(g,o)||!u||!l||distance(u,l)>32)return'Priđi plenu na 2 jedinice.';if(l.owner!==o&&l.owner!==-1&&g.tick<l.unlockAt)return'Plen je još rezervisan za drugog igrača.';
+  function pickupLoot(g,o,id,lootId){const u=g.units.find(u=>u.id===id&&u.owner===o),l=g.loot.find(l=>l.id===lootId);if(!g.running||g.paused||!mayControl(g,o)||!u||u.transportedBy||!l||distance(u,l)>32)return'Priđi plenu na 2 jedinice.';if(l.owner!==o&&l.owner!==-1&&g.tick<l.unlockAt)return'Plen je još rezervisan za drugog igrača.';
     const item=l.items.find(i=>canCarry(u,i.type)&&u.inventory.length<inventoryCapacity(u));if(!item)return'Nema mesta ili odgovarajućeg predmeta.';u.inventory.push(item);l.items=l.items.filter(i=>i!==item);if(!l.items.length)g.loot=g.loot.filter(x=>x!==l);return null;}
   function interactMove(g,o,ids,target){if(!g.running||g.paused||!mayControl(g,o)||!target||!Number.isFinite(target.x)||!Number.isFinite(target.y))return false;const cells=[];for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const p={x:Math.floor(target.x/16)*16+8+dx*16,y:Math.floor(target.y/16)*16+8+dy*16};if(distance(p,target)<=32&&p.x>0&&p.y>0&&p.x<WIDTH&&p.y<HEIGHT&&!g.blocked[cellIndex(p.x,p.y)])cells.push(p);}
     for(const u of g.units.filter(u=>u.owner===o&&!u.transportedBy&&ids.includes(u.id))){for(const p of cells.sort((a,b)=>distance(a,u)-distance(b,u))){const path=unitPath(g,u,p,true);if(path){command(g,o,[u.id],'move',p);break;}}}return true;}
@@ -658,7 +658,7 @@
   let ctx=canvas.getContext('2d'),game=createGame(),selected=['base0'],started=false,camera={x:WIDTH/2,y:HEIGHT/2,scale:1},view={width:1,height:1};
   let targetMode=null,interactionTarget=null,debugNavigation=false,cameraDrag=null,miniDrag=null,mouseInside=false,activeSubtype=null,lastSelectionClick=null,lastBindingPress=null,groupBarSignature='';
   let pointer=null,mouse={x:0,y:0},orderMarker=null,noticeTimer,lastTime=0,accumulator=0,buildMode=null,preview=null,previewKey='',terrainCache=null;
-  const CLIENT_RULES_HASH='81eafe5dc45090c1';let net=null;
+  const CLIENT_RULES_HASH='5ec8e59b44eddc0d';let net=null;
   const bindings=new Map();let draftKey=null,cameraHistory=[],lastIdle=null;
   function humanAction(type,...args){if(type==='command'&&args[2]?.id)args[2]={id:args[2].id,x:args[2].x,y:args[2].y};if(type==='setRally'&&args[1])args[1]={id:args[1].id,x:args[1].x,y:args[1].y};if(type==='interactMove'&&args[1])args[1]={id:args[1].id,x:args[1].x,y:args[1].y};if(net){if(net.ws?.readyState!==WebSocket.OPEN||!started){notify('Mreža nije spremna.');return type==='beginBuild'?{error:'Nema veze.'}:false;}net.ws.send(JSON.stringify({kind:'command',seq:++net.seq,type,args}));notify('Nalog poslat · čeka server.');return type==='beginBuild'?{queued:true,error:null}:type==='purchaseGroup'?{acceptedIds:[],errors:['Čeka server']}:['command','resumeBuild','cancelBuild','interactMove','clearPending'].includes(type)?true:null;}return executeCommand(game,game.active,{type,args,tick:game.tick}).value;}
   const keys=new Set(),modes={idle:'Nezaposlen',move:'Kretanje',toNode:'Ide po CODE',waiting:'Čeka nalazište',harvest:'Skuplja CODE',return:'Nosi CODE',toBuild:'Ide do gradilišta',build:'Gradi',blocked:'Čeka slobodan prolaz'};
