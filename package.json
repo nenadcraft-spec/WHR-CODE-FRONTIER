@@ -1,0 +1,25 @@
+{
+  "name": "whr-code-frontier",
+  "version": "0.7.0",
+  "description": "WHR RTS V7 candidate: T3, traffic and authoritative local/LAN-ready multiplayer",
+  "main": "script.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "node tools/build.cjs",
+    "start": "node server/server.cjs",
+    "test": "node tests/run-node.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "commonjs",
+  "dependencies": {
+    "ws": "8.23.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24 <27"
+  }
+}
